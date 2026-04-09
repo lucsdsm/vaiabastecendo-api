@@ -13,6 +13,11 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
+    binutils \
+    libproj-dev \
+    gdal-bin \
+    libgdal-dev \
+    python3-gdal \
     && rm -rf /var/lib/apt/lists/*
 
 # Copia e instala as dependências do Python

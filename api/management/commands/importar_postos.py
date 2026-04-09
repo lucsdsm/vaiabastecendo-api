@@ -1,7 +1,8 @@
 import requests
 import time
 from django.core.management.base import BaseCommand
-from api.models import Posto, TipoCombustivel
+from api.models import Posto
+from django.contrib.gis.geos import Point # <-- NOVO IMPORT AQUI
 import environ
 
 env = environ.Env()
@@ -10,7 +11,6 @@ class Command(BaseCommand):
     help = 'Busca postos em uma cidade específica via Google Places'
 
     def add_arguments(self, parser):
-        # Permite passar a cidade como argumento: --cidade "Natal, RN"
         parser.add_argument('--cidade', type=str, help='Cidade e Estado para busca')
 
     def handle(self, *args, **options):
@@ -24,27 +24,34 @@ class Command(BaseCommand):
             'language': 'pt-BR'
         }
 
-        self.stdout.write(self.style.SUCCESS(f'🔎 Iniciando busca em: {cidade}...'))
+        self.stdout.write(self.style.SUCCESS(f'Iniciando busca em: {cidade}...'))
 
         total_adicionado = 0
         while True:
             response = requests.get(url, params=params).json()
             
             if response.get('status') == 'INVALID_REQUEST':
-                self.stdout.write("Token do Google ainda não está pronto. Aguardando mais 2s...")
+                self.stdout.write("Aguardando token do Google...")
                 time.sleep(2)
-                continue 
+                continue
 
-            if response.get('status') != 'OK' and response.get('status') != 'ZERO_RESULTS':
-                self.stdout.write(self.style.ERROR(f"Erro na API: {response.get('status')}"))
+            if response.get('status') not in ['OK', 'ZERO_RESULTS']:
+                self.stdout.write(self.style.ERROR(f"Erro: {response.get('status')}"))
                 break
 
             results = response.get('results', [])
 
             for place in results:
+                # Extraindo coordenadas
+                lat = place['geometry']['location']['lat']
+                lng = place['geometry']['location']['lng']
+                
+                # Criando o Ponto Espacial (Atenção: Longitude primeiro!)
+                ponto_espacial = Point(float(lng), float(lat), srid=4326)
+
+                # Salvando no banco
                 posto, created = Posto.objects.update_or_create(
-                    latitude=place['geometry']['location']['lat'],
-                    longitude=place['geometry']['location']['lng'],
+                    localizacao=ponto_espacial, # <-- USANDO O NOVO CAMPO
                     defaults={
                         'nome': place['name'],
                         'endereco': place.get('formatted_address', '')
@@ -53,14 +60,14 @@ class Command(BaseCommand):
                 
                 if created:
                     total_adicionado += 1
-                    self.stdout.write(f"✅ {posto.nome} cadastrado.")
+                    self.stdout.write(f"{posto.nome} cadastrado.")
 
             next_page_token = response.get('next_page_token')
             if not next_page_token:
                 break
             
-            self.stdout.write("Aguardando próxima página...")
+            self.stdout.write("Buscando próxima página...")
             time.sleep(2)
             params = {'pagetoken': next_page_token, 'key': api_key}
 
-        self.stdout.write(self.style.SUCCESS(f'🚀 Fim! {total_adicionado} novos postos em {cidade}.'))
+        self.stdout.write(self.style.SUCCESS(f'Fim. {total_adicionado} novos postos.'))
