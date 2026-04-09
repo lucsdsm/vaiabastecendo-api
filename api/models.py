@@ -6,14 +6,22 @@ from django.contrib.gis.db import models
 
 class Posto(models.Model):
     nome = models.CharField(max_length=255)
-    localizacao = models.PointField(srid=4326)
+    localizacao = models.PointField(srid=4326, geography=True)  # Usando PointField para armazenar latitude e longitude
     endereco = models.CharField(max_length=255)
+
+    class Meta:
+        verbose_name = "Posto"
+        verbose_name_plural = "Postos"
 
     def __str__(self):
         return self.nome
 
 class TipoCombustivel(models.Model):
     nome = models.CharField(max_length=50)
+
+    class Meta:
+        verbose_name = "Tipo de Combustível"
+        verbose_name_plural = "Tipos de Combustíveis"
 
     def __str__(self):
         return self.nome
@@ -32,6 +40,10 @@ class AtualizacaoPreco(models.Model):
     data_hora = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, default='ativo')
 
+    class Meta:
+        verbose_name = "Atualização de Preço"
+        verbose_name_plural = "Atualizações de Preços"
+
     def __str__(self):
         return f"{self.posto.nome} - {self.tipo_combustivel.nome} - R$ {self.preco}"
 
@@ -46,6 +58,9 @@ class Reacao(models.Model):
 
     # usuário só pode reagir uma vez a uma atualização específica
     class Meta:
+        verbose_name = "Reação"
+        verbose_name_plural = "Reações"
+
         unique_together = ('atualizacao', 'usuario')
 
     def __str__(self):
