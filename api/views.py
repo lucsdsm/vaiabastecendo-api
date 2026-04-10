@@ -1,12 +1,11 @@
-from .models import Posto
-from .serializers import PostoSerializer
+from .models import Posto, TipoCombustivel, AtualizacaoPreco
+from .serializers import PostoSerializer, TipoCombustivelSerializer, AtualizacaoPrecoSerializer
 
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point
 from rest_framework import viewsets
 
 # Create your views here.
-
 class PostoViewSet(viewsets.ModelViewSet):
     serializer_class = PostoSerializer
 
@@ -26,3 +25,10 @@ class PostoViewSet(viewsets.ModelViewSet):
             
         return queryset
         
+class TipoCombustivelViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = TipoCombustivel.objects.all()
+    serializer_class = TipoCombustivelSerializer
+
+class AtualizacaoPrecoViewSet(viewsets.ModelViewSet):
+    queryset = AtualizacaoPreco.objects.all()
+    serializer_class = AtualizacaoPrecoSerializer

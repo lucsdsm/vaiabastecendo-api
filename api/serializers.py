@@ -1,15 +1,16 @@
 from rest_framework import serializers
-from .models import Posto
+from .models import Posto, TipoCombustivel, AtualizacaoPreco
 
 class PostoSerializer(serializers.ModelSerializer):
     # Campos adicionais para latitude, longitude e distância em metros
     latitude = serializers.SerializerMethodField()
     longitude = serializers.SerializerMethodField()
     distancia_metros = serializers.SerializerMethodField()
+    precos_atuais = serializers.SerializerMethodField()
 
     class Meta:
         model = Posto
-        fields = ['id', 'nome', 'endereco', 'latitude', 'longitude', 'distancia_metros']
+        fields = ['id', 'nome', 'endereco', 'latitude', 'longitude', 'distancia_metros', 'precos_atuais']
 
     # Extrai o eixo Y do campo 'localizacao' para a latitude
     def get_latitude(self, obj):
@@ -24,3 +25,29 @@ class PostoSerializer(serializers.ModelSerializer):
         if hasattr(obj, 'distancia_calculada') and obj.distancia_calculada:
             return obj.distancia_calculada.m  # Retorna os metros
         return None
+
+    # Retorna os preços mais recentes de cada tipo de combustível para o posto
+    def get_precos_atuais(self, obj):
+        tipos = TipoCombustivel.objects.all()
+        lista_precos = []
+        for tipo in tipos:
+            ultima_atualizacao = obj.atualizacoes.filter(tipo_combustivel=tipo, status='ativo').order_by('-data_hora').first()
+            if ultima_atualizacao:
+                lista_precos.append({
+                    'tipo': tipo.nome,
+                    'cor': tipo.cor,
+                    'preco': float(ultima_atualizacao.preco),
+                    'data': ultima_atualizacao.data_hora
+                })
+        return lista_precos
+
+class TipoCombustivelSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TipoCombustivel
+        fields = ['id', 'nome', 'cor']
+
+class AtualizacaoPrecoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AtualizacaoPreco
+        fields = ['id', 'posto', 'tipo_combustivel', 'preco', 'data_hora']
+        read_only_fields = ['data_hora']

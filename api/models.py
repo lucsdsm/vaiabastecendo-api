@@ -18,6 +18,7 @@ class Posto(models.Model):
 
 class TipoCombustivel(models.Model):
     nome = models.CharField(max_length=50)
+    cor = models.CharField(max_length=7, default='#000000')
 
     class Meta:
         verbose_name = "Tipo de Combustível"
