@@ -10,7 +10,9 @@ class PostoViewSet(viewsets.ModelViewSet):
     serializer_class = PostoSerializer
 
     def get_queryset(self):
-        queryset = Posto.objects.all()
+        queryset = Posto.objects.prefetch_related(
+            'atualizacoes__usuario', 
+            'atualizacoes__tipo_combustivel').all().order_by('id')
 
         lat = self.request.query_params.get('lat')
         lng = self.request.query_params.get('lng')
@@ -28,6 +30,7 @@ class PostoViewSet(viewsets.ModelViewSet):
 class TipoCombustivelViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = TipoCombustivel.objects.all()
     serializer_class = TipoCombustivelSerializer
+    pagination_class = None
 
 class AtualizacaoPrecoViewSet(viewsets.ModelViewSet):
     queryset = AtualizacaoPreco.objects.all()

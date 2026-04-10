@@ -7,10 +7,12 @@ class PostoSerializer(serializers.ModelSerializer):
     longitude = serializers.SerializerMethodField()
     distancia_metros = serializers.SerializerMethodField()
     precos_atuais = serializers.SerializerMethodField()
+    autor_ultima_atualizacao = serializers.SerializerMethodField()
 
     class Meta:
         model = Posto
-        fields = ['id', 'nome', 'endereco', 'latitude', 'longitude', 'distancia_metros', 'precos_atuais']
+        fields = ['id', 'nome', 'endereco', 'latitude', 'longitude', 'distancia_metros', 'precos_atuais', 
+        'autor_ultima_atualizacao']
 
     # Extrai o eixo Y do campo 'localizacao' para a latitude
     def get_latitude(self, obj):
@@ -26,6 +28,13 @@ class PostoSerializer(serializers.ModelSerializer):
             return obj.distancia_calculada.m  # Retorna os metros
         return None
 
+    # Retorna o nome do autor da última atualização de preço para o posto
+    def get_autor_ultima_atualizacao(self, obj):
+        ultima_atualizacao = obj.atualizacoes.filter(status='ativo').order_by('-data_hora').first()
+        if ultima_atualizacao and ultima_atualizacao.usuario:
+            return ultima_atualizacao.usuario.username
+        return "Anônimo"
+
     # Retorna os preços mais recentes de cada tipo de combustível para o posto
     def get_precos_atuais(self, obj):
         tipos = TipoCombustivel.objects.all()
@@ -37,7 +46,7 @@ class PostoSerializer(serializers.ModelSerializer):
                     'tipo': tipo.nome,
                     'cor': tipo.cor,
                     'preco': float(ultima_atualizacao.preco),
-                    'data': ultima_atualizacao.data_hora
+                    'data': ultima_atualizacao.data_hora,
                 })
         return lista_precos
 

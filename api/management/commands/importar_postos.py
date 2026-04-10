@@ -2,7 +2,7 @@ import requests
 import time
 from django.core.management.base import BaseCommand
 from api.models import Posto
-from django.contrib.gis.geos import Point # <-- NOVO IMPORT AQUI
+from django.contrib.gis.geos import Point
 import environ
 
 env = environ.Env()
