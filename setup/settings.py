@@ -163,6 +163,8 @@ REST_FRAMEWORK = {
     ]
 }
 
+SOCIALACCOUNT_ADAPTER = 'api.adapters.CustomSocialAccountAdapter'
+
 CSRF_TRUSTED_ORIGINS = [
     'https://bookish-space-broccoli-qrqvwq77r526wqx-8000.app.github.dev',
 ]
