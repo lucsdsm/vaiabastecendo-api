@@ -4,11 +4,13 @@ from rest_framework.routers import DefaultRouter
 from .views.postos import PostoViewSet
 from .views.combustiveis import TipoCombustivelViewSet
 from .views.atualizacoes import AtualizacaoPrecoViewSet
+from .views.reacoes import ReacaoViewSet
 from .views.auth import GoogleLogin, UserProfileView
 
 router = DefaultRouter()
 router.register(r'postos', PostoViewSet, basename='posto')
 router.register(r'tipos-combustivel', TipoCombustivelViewSet, basename='tipocombustivel')
+router.register(r'reacoes', ReacaoViewSet, basename='reacao')
 router.register(r'atualizar-preco', AtualizacaoPrecoViewSet, basename='atualizacaopreco')
 
 urlpatterns = [

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Posto, TipoCombustivel, AtualizacaoPreco
+from .models import Posto, TipoCombustivel, AtualizacaoPreco, Reacao
 
 class PostoSerializer(serializers.ModelSerializer):
     # Campos adicionais para latitude, longitude e distância em metros
@@ -8,11 +8,13 @@ class PostoSerializer(serializers.ModelSerializer):
     distancia_metros = serializers.SerializerMethodField()
     precos_atuais = serializers.SerializerMethodField()
     autor_ultima_atualizacao = serializers.SerializerMethodField()
+    likes = serializers.SerializerMethodField()
+    is_liked = serializers.SerializerMethodField()
 
     class Meta:
         model = Posto
         fields = ['id', 'nome', 'endereco', 'latitude', 'longitude', 'distancia_metros', 'precos_atuais', 
-        'autor_ultima_atualizacao']
+        'autor_ultima_atualizacao', 'likes', 'is_liked']
 
     # Extrai o eixo Y do campo 'localizacao' para a latitude
     def get_latitude(self, obj):
@@ -43,12 +45,28 @@ class PostoSerializer(serializers.ModelSerializer):
             ultima_atualizacao = obj.atualizacoes.filter(tipo_combustivel=tipo, status='ativo').order_by('-data_hora').first()
             if ultima_atualizacao:
                 lista_precos.append({
+                    'id': ultima_atualizacao.id,
                     'tipo': tipo.nome,
                     'cor': tipo.cor,
                     'preco': float(ultima_atualizacao.preco),
                     'data': ultima_atualizacao.data_hora,
                 })
         return lista_precos
+
+    def get_likes(self, obj):
+        return Reacao.objects.filter(atualizacao__posto=obj, tipo='like').count()
+    
+    def get_is_liked(self, obj):
+        # 1. Tenta pegar o request de forma segura
+        request = self.context.get('request')
+        
+        # 2. Verifica se o request existe, se tem um usuário atrelado, e se ele está logado
+        if request and hasattr(request, 'user') and request.user.is_authenticated:
+            # 3. Importante: Garanta que o modelo Reacao foi importado lá no topo do arquivo!
+            from .models import Reacao 
+            return Reacao.objects.filter(atualizacao__posto=obj, usuario=request.user, tipo='like').exists()
+        
+        return False
 
 class TipoCombustivelSerializer(serializers.ModelSerializer):
     class Meta:
@@ -60,3 +78,9 @@ class AtualizacaoPrecoSerializer(serializers.ModelSerializer):
         model = AtualizacaoPreco
         fields = ['id', 'posto', 'tipo_combustivel', 'preco', 'usuario', 'data_hora', 'status']
         read_only_fields = ['usuario', 'data_hora', 'status']
+
+class ReacaoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Reacao
+        fields = ['id', 'atualizacao', 'usuario', 'tipo']
+        read_only_fields = ['usuario'] 
