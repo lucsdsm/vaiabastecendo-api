@@ -58,5 +58,5 @@ class TipoCombustivelSerializer(serializers.ModelSerializer):
 class AtualizacaoPrecoSerializer(serializers.ModelSerializer):
     class Meta:
         model = AtualizacaoPreco
-        fields = ['id', 'posto', 'tipo_combustivel', 'preco', 'data_hora']
-        read_only_fields = ['data_hora']
+        fields = ['id', 'posto', 'tipo_combustivel', 'preco', 'usuario', 'data_hora', 'status']
+        read_only_fields = ['usuario', 'data_hora', 'status']
