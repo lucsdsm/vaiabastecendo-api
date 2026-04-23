@@ -1,12 +1,12 @@
-import requests
 from django.core.management.base import BaseCommand
 from api.models import TipoCombustivel
+
 
 class Command(BaseCommand):
     help = 'Importa tipos de combustíveis para o banco de dados'
 
-    # Criar combustíveis com nomes e cores pré-definidos:
     def handle(self, *args, **options):
+        """Sincroniza catálogo fixo de combustíveis e cores padrão do app."""
         combustiveis = [
             {'nome': 'Gasolina Comum', 'cor': '#ff8000'},  
             {'nome': 'Gasolina Aditivada', 'cor': '#0000FF'},

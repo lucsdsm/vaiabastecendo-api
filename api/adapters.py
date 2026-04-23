@@ -1,7 +1,11 @@
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 
+
 class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
+    """Gera username único a partir do e-mail no fluxo social login."""
+
     def populate_user(self, request, sociallogin, data):
+        """Evita colisão de username adicionando sufixo incremental."""
         user = super().populate_user(request, sociallogin, data)
         
         email = data.get('email')

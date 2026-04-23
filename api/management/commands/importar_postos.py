@@ -7,6 +7,7 @@ import environ
 
 env = environ.Env()
 
+
 class Command(BaseCommand):
     help = 'Busca postos em uma cidade específica via Google Places'
 
@@ -14,6 +15,7 @@ class Command(BaseCommand):
         parser.add_argument('--cidade', type=str, help='Cidade e Estado para busca')
 
     def handle(self, *args, **options):
+        """Importa postos via Google Places respeitando paginação por token."""
         cidade = options.get('cidade') or 'Natal, RN'
         api_key = env('PLACES_API_KEY')
         url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
@@ -31,6 +33,7 @@ class Command(BaseCommand):
             response = requests.get(url, params=params).json()
             
             if response.get('status') == 'INVALID_REQUEST':
+                # O token de próxima página demora alguns segundos para ficar válido.
                 self.stdout.write("Aguardando token do Google...")
                 time.sleep(2)
                 continue
@@ -42,16 +45,14 @@ class Command(BaseCommand):
             results = response.get('results', [])
 
             for place in results:
-                # Extraindo coordenadas
                 lat = place['geometry']['location']['lat']
                 lng = place['geometry']['location']['lng']
                 
-                # Criando o Ponto Espacial (Atenção: Longitude primeiro!)
+                # Em geometrias WGS84 o eixo X é longitude e o Y é latitude.
                 ponto_espacial = Point(float(lng), float(lat), srid=4326)
 
-                # Salvando no banco
                 posto, created = Posto.objects.update_or_create(
-                    localizacao=ponto_espacial, # <-- USANDO O NOVO CAMPO
+                    localizacao=ponto_espacial,
                     defaults={
                         'nome': place['name'],
                         'endereco': place.get('formatted_address', '')

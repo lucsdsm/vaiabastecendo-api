@@ -4,12 +4,16 @@ from rest_framework.permissions import IsAuthenticated
 from ..models import Reacao, AtualizacaoPreco
 from ..serializers import ReacaoSerializer
 
+
 class ReacaoViewSet(viewsets.ModelViewSet):
+    """Cria, alterna e remove reação do usuário por atualização de preço."""
+
     queryset = Reacao.objects.all()
     serializer_class = ReacaoSerializer
     permission_classes = [IsAuthenticated]
 
     def create(self, request, *args, **kwargs):
+        """Aplica semântica de toggle para evitar múltiplas reações por usuário."""
         id_atualizacao = request.data.get('atualizacao')
         tipo_reacao = request.data.get('tipo')
         usuario = request.user
@@ -20,6 +24,7 @@ class ReacaoViewSet(viewsets.ModelViewSet):
         reacao_existente = Reacao.objects.filter(atualizacao_id=id_atualizacao, usuario=usuario).first()
 
         if reacao_existente:
+            # Mesma reação remove voto; reação diferente apenas troca o tipo.
             if reacao_existente.tipo == tipo_reacao:
                 reacao_existente.delete()
                 return Response(status=status.HTTP_204_NO_CONTENT)
