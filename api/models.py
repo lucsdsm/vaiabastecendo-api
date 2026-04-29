@@ -1,8 +1,16 @@
 from django.db import models
-from django.contrib.auth.models import User
+from django.contrib.auth.models import AbstractUser
+from django.conf import settings
 from django.contrib.gis.db import models
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
 
-# Create your models here.
+class Usuario(AbstractUser):
+    pontos = models.IntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Usuário"
+        verbose_name_plural = "Usuários"
 
 class Posto(models.Model):
     nome = models.CharField(max_length=255)
@@ -32,7 +40,7 @@ class AtualizacaoPreco(models.Model):
     posto = models.ForeignKey(Posto, on_delete=models.CASCADE, related_name='atualizacoes')
 
     # se um usuário for deletado, o campo 'usuario' será definido como NULL, mas a atualização de preço permanecerá.
-    usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='atualizacoes_feitas')
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='atualizacoes_feitas')
     
     tipo_combustivel = models.ForeignKey(TipoCombustivel, on_delete=models.CASCADE)
     preco = models.DecimalField(max_digits=5, decimal_places=2)
@@ -54,7 +62,7 @@ class Reacao(models.Model):
         ('dislike', 'Dislike'),
     )
     atualizacao = models.ForeignKey(AtualizacaoPreco, on_delete=models.CASCADE, related_name='reacoes')
-    usuario = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reacoes_dadas')
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='reacoes_dadas')
     tipo = models.CharField(max_length=10, choices=TIPO_CHOICES)
 
     # usuário só pode reagir uma vez a uma atualização específica
@@ -66,3 +74,26 @@ class Reacao(models.Model):
 
     def __str__(self):
         return f"{self.usuario.username} - {self.tipo} em {self.atualizacao.id}"
+
+# Quando uma Reação é criada ou alterada, atualiza os pontos do usuário que fez a atualização de preço
+@receiver(post_save, sender=Reacao)
+def processar_pontuacao_reacao(sender, instance, created, **kwargs):
+    autor = instance.atualizacao.usuario
+    if autor:
+        if created:
+            autor.pontos += 1 if instance.tipo == 'like' else -1
+        else:
+            autor.pontos += 2 if instance.tipo == 'like' else -2
+        autor.save()
+
+# Quando o usuário clica novamente para remover o like (Delete)
+@receiver(post_delete, sender=Reacao)
+def reverter_pontuacao_reacao(sender, instance, **kwargs):
+    autor = instance.atualizacao.usuario
+    
+    if not autor:
+        return
+        
+    # Faz o inverso direto no autor. Se apagou um like, perde 1 ponto.
+    autor.pontos -= 1 if instance.tipo == 'like' else -1
+    autor.save()
