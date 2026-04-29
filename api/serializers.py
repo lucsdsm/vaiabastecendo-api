@@ -10,13 +10,11 @@ class PostoSerializer(serializers.ModelSerializer):
     distancia_metros = serializers.SerializerMethodField()
     precos_atuais = serializers.SerializerMethodField()
     autor_ultima_atualizacao = serializers.SerializerMethodField()
-    likes = serializers.SerializerMethodField()
-    is_liked = serializers.SerializerMethodField()
 
     class Meta:
         model = Posto
         fields = ['id', 'nome', 'endereco', 'latitude', 'longitude', 'distancia_metros', 'precos_atuais', 
-        'autor_ultima_atualizacao', 'likes', 'is_liked']
+        'autor_ultima_atualizacao']
 
     def get_latitude(self, obj):
         """Retorna latitude a partir do ponto geográfico do posto."""
@@ -40,19 +38,36 @@ class PostoSerializer(serializers.ModelSerializer):
         return "Anônimo"
 
     def get_precos_atuais(self, obj):
-        """Retorna um snapshot com o último preço ativo de cada tipo."""
+        """Retorna um snapshot com o último preço ativo de cada tipo, incluindo suas reações individuais."""
+        # Pega o usuário logado a partir do contexto do request (injetado pelo ViewSet)
+        request = self.context.get('request')
+        usuario_logado = request.user if request and hasattr(request, 'user') and request.user.is_authenticated else None
+
         tipos = TipoCombustivel.objects.all()
         lista_precos = []
+        
         for tipo in tipos:
             ultima_atualizacao = obj.atualizacoes.filter(tipo_combustivel=tipo, status='ativo').order_by('-data_hora').first()
+            
             if ultima_atualizacao:
+                # Calcula as reações exclusivamente para essa atualização
+                total_likes = Reacao.objects.filter(atualizacao=ultima_atualizacao, tipo='like').count()
+                
+                # Verifica se o usuário logado curtiu essa atualização
+                usuario_curtiu = False
+                if usuario_logado:
+                    usuario_curtiu = Reacao.objects.filter(atualizacao=ultima_atualizacao, usuario=usuario_logado, tipo='like').exists()
+
                 lista_precos.append({
                     'id': ultima_atualizacao.id,
                     'tipo': tipo.nome,
                     'cor': tipo.cor,
                     'preco': float(ultima_atualizacao.preco),
                     'data': ultima_atualizacao.data_hora,
+                    'likes': total_likes,     
+                    'is_liked': usuario_curtiu
                 })
+                
         return lista_precos
 
     def get_likes(self, obj):
@@ -111,7 +126,6 @@ class AtualizacaoPrecoSerializer(serializers.ModelSerializer):
                 })
                 
             return data
-
 
 class ReacaoSerializer(serializers.ModelSerializer):
     class Meta:
