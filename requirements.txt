@@ -14,3 +14,5 @@ PyJWT[crypto]
 cryptography
 requests
 requests-oauthlib
+
+gunicorn

@@ -18,7 +18,7 @@ services:
 
   web:
     build: .
-    command: python manage.py runserver 0.0.0.0:8000
+    command: gunicorn setup.wsgi:application --bind 0.0.0.0:8000 --access-logfile -
     volumes:
       - .:/app
     ports:
@@ -28,6 +28,24 @@ services:
         condition: service_healthy
     env_file:
       - .env
-      
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "4443:443"
+    volumes:
+      - ./nginx:/etc/nginx/conf.d
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    depends_on:
+      - web
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+
 volumes:
   postgres_data:
