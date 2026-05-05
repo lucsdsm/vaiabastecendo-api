@@ -1,6 +1,9 @@
 from rest_framework import serializers
+from django.contrib.auth import get_user_model
 from .models import Posto, TipoCombustivel, AtualizacaoPreco, Reacao
 from decimal import Decimal
+
+User = get_user_model()
 
 class PostoSerializer(serializers.ModelSerializer):
     """Serializa posto com preços atuais, autor da última atualização e reações."""

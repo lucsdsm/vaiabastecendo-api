@@ -4,7 +4,6 @@ from api.serializers import AtualizacaoPrecoSerializer
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
-
 class AtualizacaoPrecoViewSet(viewsets.ModelViewSet):
     """Gerencia atualizações de preço associando o usuário autenticado."""
 

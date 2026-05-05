@@ -17,5 +17,5 @@ urlpatterns = [
     path('', include(router.urls)),
     
     path('auth/google/', GoogleLogin.as_view(), name='google_login'),
-    path('auth/me/', UserProfileView.as_view(), name='user_profile'),
+    path('auth/me/', UserProfileView.as_view(), name='user_profile')
 ]
