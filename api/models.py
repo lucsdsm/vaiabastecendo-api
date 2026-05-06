@@ -13,9 +13,14 @@ class Usuario(AbstractUser):
         verbose_name_plural = "Usuários"
 
 class Posto(models.Model):
+    place_id = models.CharField(max_length=255, unique=True, null=True, blank=True)  # Armazena o place_id do Google Places para evitar duplicatas
     nome = models.CharField(max_length=255)
     localizacao = models.PointField(srid=4326, geography=True)  # Usando PointField para armazenar latitude e longitude
     endereco = models.CharField(max_length=255)
+    bandeira = models.CharField(
+        max_length=50, 
+        default='Bandeira Branca' # Se não identificar, assume que é independente
+    )
 
     class Meta:
         verbose_name = "Posto"

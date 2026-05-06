@@ -3,6 +3,7 @@
 venv/
 __pycache__/
 *.pyc
+/certbot
 
 # arquivos de documentação
 /docs

@@ -6,8 +6,8 @@ from django.contrib.auth.admin import UserAdmin
 
 @admin.register(Posto)
 class PostoAdmin(admin.GISModelAdmin): 
-    list_display = ('nome', 'endereco')
-    search_fields = ('nome', 'endereco')
+    list_display = ('place_id', 'nome', 'endereco', 'bandeira')
+    search_fields = ('place_id', 'nome', 'endereco', 'bandeira')
 
     gis_widget_kwargs = {
         'attrs': {
