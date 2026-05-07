@@ -100,6 +100,7 @@ DATABASES = {
         'PASSWORD': env('DB_PASSWORD'),
         'HOST': 'db',
         'PORT': '5432',
+        'CONN_MAX_AGE': 60,
     }
 }
 
