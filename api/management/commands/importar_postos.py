@@ -3,21 +3,37 @@ import time
 from django.core.management.base import BaseCommand
 from api.models import Posto
 from django.contrib.gis.geos import Point
-from django.conntrib.gis.measure import D
+from django.contrib.gis.measure import D
 import environ
 import re
 
 env = environ.Env()
 
 def identificar_bandeira(nome_posto):
+    """
+    Analisa o nome do posto e retorna a bandeira ou rede regional correspondente.
+    """
     nome = str(nome_posto.lower())
 
-    if re.search(r'\b(petrobras|br)\b', nome): return 'Petrobras'
-    if re.search(r'\bshell\b', nome): return 'Shell'
-    if re.search(r'\bipiranga\b', nome): return 'Ipiranga'
-    if re.search(r'\bale\b', nome): return 'Ale'
-    if re.search(r'\btexaco\b', nome): return 'Texaco'
-    
+    # Dicionário de mapeamento: 'Nome da Bandeira': r'Regra de Captura'
+    regras = {
+        'Petrobras': r'\b(petrobras|br)\b',
+        'Shell': r'\bshell\b',
+        'Ipiranga': r'\b(ipiranga|ampm)\b',
+        'Ale': r'\bale\b',
+        'Texaco': r'\btexaco\b',
+        'Pinheiro Borges': r'\bpinheiro borges\b',
+        'Cirne': r'\bcirne\b',
+        'Lemon': r'\blemon\b',
+        'Estrela': r'\bestrela\b',
+        'Posto Macaco': r'\bmacaco\b',
+        'Setta': r'\bsetta\b',
+    }
+
+    for bandeira, padrao in regras.items():
+        if re.search(padrao, nome):
+            return bandeira
+            
     return 'Bandeira Branca'
 
 class Command(BaseCommand):

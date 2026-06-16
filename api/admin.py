@@ -1,13 +1,33 @@
+import csv
+from django.http import HttpResponse
+
 from django.contrib.gis import admin
 from django.contrib.auth.models import AbstractUser
 from .models import Usuario, Posto, TipoCombustivel, AtualizacaoPreco, Reacao
 from django.db import models
 from django.contrib.auth.admin import UserAdmin
 
+@admin.action(description='Exportar postos selecionados para CSV')
+def exportar_para_csv(modeladmin, request, queryset):
+    # Cria a resposta HTTP com o tipo de arquivo correto
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = 'attachment; filename="postos_selecionados.csv"'
+    
+    writer = csv.writer(response)
+    # Escreve o cabeçalho
+    writer.writerow(['id', 'nome', 'bandeira', 'endereco'])
+    
+    # Escreve os dados dos postos que você marcou na tela
+    for posto in queryset:
+        writer.writerow([posto.id, posto.nome, posto.bandeira, posto.endereco])
+        
+    return response
+
 @admin.register(Posto)
 class PostoAdmin(admin.GISModelAdmin): 
     list_display = ('place_id', 'nome', 'endereco', 'bandeira')
     search_fields = ('place_id', 'nome', 'endereco', 'bandeira')
+    actions = [exportar_para_csv]
 
     gis_widget_kwargs = {
         'attrs': {

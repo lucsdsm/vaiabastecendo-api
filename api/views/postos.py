@@ -11,10 +11,6 @@ class PostoViewSet(viewsets.ModelViewSet):
     serializer_class = PostoSerializer
 
     def get_queryset(self):
-        # queryset = Posto.objects.prefetch_related(
-        #     'atualizacoes__usuario', 
-        #     'atualizacoes__tipo_combustivel'
-        # ).all()
         queryset = Posto.objects.all()
 
         lat = self.request.query_params.get('lat')
@@ -24,13 +20,11 @@ class PostoViewSet(viewsets.ModelViewSet):
             user_location = Point(float(lng), float(lat), srid=4326)
 
             # 1. FILTRO ESPACIAL
-            # Força o banco a usar o índice GiST. Descarta instantaneamente 
-            # qualquer posto que esteja a mais de 10 km de distância do motorista.
+            # Força o banco a usar o índice GiST. Descarta instantaneamente qualquer posto que esteja a mais de 10 km de distância do motorista.
             queryset = queryset.filter(localizacao__dwithin=(user_location, D(km=10)))
 
             # 2. MATEMÁTICA EXATA
-            # Ssó calcula a distância exata para os 10 ou 20 postos que
-            # sobraram no filtro acima, em vez de milhares.
+            # Só calcula a distância exata para os 10 ou 20 postos que sobraram no filtro acima, em vez de milhares.
             queryset = queryset.annotate(
                 distancia_calculada=Distance('localizacao', user_location)
             ).order_by('distancia_calculada')

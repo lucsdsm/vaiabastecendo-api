@@ -67,6 +67,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'allauth.account.middleware.AccountMiddleware',
+    'api.dc_monitor.DiscordMonitorMiddleware',
 ]
 
 ROOT_URLCONF = 'setup.urls'
