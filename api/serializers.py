@@ -34,11 +34,20 @@ class PostoSerializer(serializers.ModelSerializer):
         return None
 
     def get_autor_ultima_atualizacao(self, obj):
-        """Expõe autor da atualização ativa mais recente para o posto."""
+        """Expõe autor da atualização ativa mais recente para o posto, incluindo status de verificado."""
         ultima_atualizacao = obj.atualizacoes.filter(status='ativo').order_by('-data_hora').first()
+        
         if ultima_atualizacao and ultima_atualizacao.usuario:
-            return ultima_atualizacao.usuario.username
-        return "Anônimo"
+            usuario = ultima_atualizacao.usuario
+            return {
+                "nome": usuario.username,
+                "verificado": usuario.pontos >= 100 
+            }
+            
+        return {
+            "nome": "Anônimo",
+            "verificado": False
+        }
 
     def get_precos_atuais(self, obj):
         """Retorna um snapshot com o último preço ativo de cada tipo, incluindo suas reações individuais."""

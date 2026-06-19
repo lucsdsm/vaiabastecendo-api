@@ -11,6 +11,10 @@ class Usuario(AbstractUser):
     class Meta:
         verbose_name = "Usuário"
         verbose_name_plural = "Usuários"
+    
+    @property
+    def verificado(self):
+        return self.pontos >= 100
 
 class Posto(models.Model):
     place_id = models.CharField(max_length=255, unique=True, null=True, blank=True)  # Armazena o place_id do Google Places para evitar duplicatas

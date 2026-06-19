@@ -46,5 +46,6 @@ class UserProfileView(APIView):
             "email": user.email,
             "foto": foto_url,
             "likes_recebidos": likes_recebidos,
-            "likes_deferidos": likes_deferidos
+            "likes_deferidos": likes_deferidos,
+            "verificado": user.verificado
         })
