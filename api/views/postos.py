@@ -6,6 +6,11 @@ from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point
 from rest_framework import viewsets
 
+from rest_framework.decorators import action
+from rest_framework.response import Response
+
+from api.serializers import HistoricoAtualizacaoSerializer
+
 class PostoViewSet(viewsets.ModelViewSet):
     """Expõe postos com suporte opcional de ordenação por proximidade num raio limite."""
     serializer_class = PostoSerializer
@@ -33,3 +38,15 @@ class PostoViewSet(viewsets.ModelViewSet):
             queryset = queryset.order_by('id')
             
         return queryset
+
+    @action(detail=True, methods=['get'])
+    def historico(self, request, pk=None):
+        """Retorna as últimas 20 atualizações de preço deste posto."""
+        posto = self.get_object()
+        
+        # Filtra as ativas e ordena da mais recente para a mais antiga.
+        # O [:20] limita a busca para não pesar o banco de dados.
+        historico = posto.atualizacoes.filter(status='ativo').order_by('-data_hora')[:20]
+        
+        serializer = HistoricoAtualizacaoSerializer(historico, many=True)
+        return Response(serializer.data)

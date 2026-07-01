@@ -139,6 +139,21 @@ class AtualizacaoPrecoSerializer(serializers.ModelSerializer):
                 
             return data
 
+class HistoricoAtualizacaoSerializer(serializers.ModelSerializer):
+    """Serializa os dados básicos para a tabela de histórico de preços."""
+
+    tipo_combustivel = serializers.CharField(source='tipo_combustivel.nome', read_only=True)
+    autor = serializers.CharField(source='usuario.username', default='Anônimo', read_only=True)
+
+    class Meta:
+        model = AtualizacaoPreco
+        fields = ['id', 'tipo_combustivel', 'preco', 'data_hora', 'autor']
+
+    def get_autor(self, obj):
+        if obj.usuario:
+            return obj.usuario.username
+        return "Anônimo"
+
 class ReacaoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reacao

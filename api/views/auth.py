@@ -16,7 +16,6 @@ class GoogleLogin(SocialLoginView):
     client_class = OAuth2Client
     callback_url = 'https://auth.expo.io'
 
-
 class UserProfileView(APIView):
     """Retorna dados básicos do usuário autenticado e foto social quando existir."""
 
