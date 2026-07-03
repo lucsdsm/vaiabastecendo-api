@@ -1,7 +1,6 @@
 from django.core.management.base import BaseCommand
 from api.models import TipoCombustivel
 
-
 class Command(BaseCommand):
     help = 'Importa tipos de combustíveis para o banco de dados'
 

@@ -25,6 +25,7 @@ class Posto(models.Model):
         max_length=50, 
         default='Bandeira Branca' # Se não identificar, assume que é independente
     )
+    avaliacao = models.FloatField(null=True, blank=True)
 
     class Meta:
         verbose_name = "Posto"

@@ -17,7 +17,7 @@ def exportar_para_csv(modeladmin, request, queryset):
     # Escreve o cabeçalho
     writer.writerow(['id', 'nome', 'bandeira', 'endereco'])
     
-    # Escreve os dados dos postos que você marcou na tela
+    # Escreve os dados dos postos que você marquei na tela
     for posto in queryset:
         writer.writerow([posto.id, posto.nome, posto.bandeira, posto.endereco])
         
@@ -25,7 +25,7 @@ def exportar_para_csv(modeladmin, request, queryset):
 
 @admin.register(Posto)
 class PostoAdmin(admin.GISModelAdmin): 
-    list_display = ('place_id', 'nome', 'endereco', 'bandeira')
+    list_display = ('place_id', 'nome', 'endereco', 'bandeira', 'avaliacao')
     search_fields = ('place_id', 'nome', 'endereco', 'bandeira')
     actions = [exportar_para_csv]
 

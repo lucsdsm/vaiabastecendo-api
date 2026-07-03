@@ -55,7 +55,7 @@ class Command(BaseCommand):
             # 'Nova Parnamirim, Parnamirim, RN',
             # 'Centro, Parnamirim, RN'
             # 'Nova Esperança, Parnamirim, RN',
-            'São José do Mipibu, RN',
+            # 'São José do Mipibu, RN',
         ]
 
         total_geral_adicionado = 0
@@ -114,7 +114,8 @@ class Command(BaseCommand):
                             'place_id': place.get('place_id', ''),
                             'nome': place['name'],
                             'endereco': place.get('formatted_address', ''),
-                            'bandeira': identificar_bandeira(place['name'])
+                            'bandeira': identificar_bandeira(place['name']),
+                            'avaliacao': place.get('rating', None)
                         }
                     )
                     

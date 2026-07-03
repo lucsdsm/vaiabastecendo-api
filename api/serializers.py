@@ -16,7 +16,7 @@ class PostoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Posto
-        fields = ['id', 'nome', 'endereco', 'bandeira', 'latitude', 'longitude', 'distancia_metros', 'precos_atuais', 
+        fields = ['id', 'nome', 'endereco', 'bandeira', 'avaliacao', 'latitude', 'longitude', 'distancia_metros', 'precos_atuais', 
         'autor_ultima_atualizacao']
 
     def get_latitude(self, obj):
