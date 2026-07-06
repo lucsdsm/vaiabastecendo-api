@@ -15,7 +15,7 @@ def exportar_para_csv(modeladmin, request, queryset):
     
     writer = csv.writer(response)
     # Escreve o cabeçalho
-    writer.writerow(['id', 'nome', 'bandeira', 'endereco'])
+    writer.writerow(['id', 'nome', 'bandeira', 'endereco', 'avaliacao'])
     
     # Escreve os dados dos postos que você marquei na tela
     for posto in queryset:

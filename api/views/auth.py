@@ -31,9 +31,6 @@ class UserProfileView(APIView):
         if social_account:
             foto_url = social_account.extra_data.get('picture')
 
-        # Conta quantos likes as atualizacoes deste usuario receberam
-        likes_recebidos = Reacao.objects.filter(atualizacao__usuario=user, tipo='like').count()
-
         # Conta quantos likes este usuario distribuiu no app
         likes_deferidos = Reacao.objects.filter(usuario=user, tipo='like').count()
 
@@ -44,7 +41,8 @@ class UserProfileView(APIView):
             "ultimo_nome": user.last_name,
             "email": user.email,
             "foto": foto_url,
-            "likes_recebidos": likes_recebidos,
+            "likes_recebidos": user.pontos,
             "likes_deferidos": likes_deferidos,
+            "pontos": user.pontos,
             "verificado": user.verificado
         })

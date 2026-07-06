@@ -105,5 +105,5 @@ def reverter_pontuacao_reacao(sender, instance, **kwargs):
         return
         
     # Faz o inverso direto no autor. Se apagou um like, perde 1 ponto.
-    autor.pontos -= 1 if instance.tipo == 'like' else -1
+    autor.pontos = max(0, autor.pontos - 1)
     autor.save()
