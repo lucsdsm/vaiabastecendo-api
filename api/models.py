@@ -37,10 +37,12 @@ class Posto(models.Model):
 class TipoCombustivel(models.Model):
     nome = models.CharField(max_length=50)
     cor = models.CharField(max_length=7, default='#000000')
+    order = models.IntegerField(default=0)
 
     class Meta:
         verbose_name = "Tipo de Combustível"
         verbose_name_plural = "Tipos de Combustíveis"
+        ordering = ['order', 'nome']
 
     def __str__(self):
         return self.nome
