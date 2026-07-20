@@ -18,7 +18,7 @@ services:
 
   web:
     build: .
-    command: gunicorn setup.wsgi:application --bind 0.0.0.0:8000 --workers 3 --access-logfile -
+    command: gunicorn setup.wsgi:application --bind 0.0.0.0:8000 --workers 3 --access-logfile - --error-logfile -  --log-level debug
     volumes:
       - .:/app
     ports:

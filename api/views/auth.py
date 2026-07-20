@@ -51,14 +51,14 @@ class UserProfileView(APIView):
         likes_given = Reaction.objects.filter(user=user, reaction_type='like').count()
 
         return Response({
-            "id": user.id,
-            "username": user.username,
-            "first_name": user.first_name,
-            "last_name": user.last_name,
-            "email": user.email,
-            "photo": photo_url,
-            "likes_received": user.points,
-            "likes_given": likes_given,
-            "points": user.points,
-            "verified": user.verified,
+            'id': user.id,
+            'username': user.username,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'email': user.email,
+            'photo': photo_url,
+            'likes_received': user.points,
+            'likes_given': likes_given,
+            'points': user.points,
+            'verified': user.verified,
         })
