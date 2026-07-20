@@ -106,38 +106,34 @@ class AtualizacaoPrecoSerializer(serializers.ModelSerializer):
         fields = ['id', 'posto', 'tipo_combustivel', 'preco', 'usuario', 'data_hora', 'status']
         read_only_fields = ['usuario', 'data_hora', 'status']
 
-        def validate(self, data):
-            """Valida integridade do preço e existência de posto e tipo de combustível."""
-            posto = data.get('posto')
-            tipo_combustivel = data.get('tipo_combustivel')
-            novo_preco = data.get('preco')
+    def validate(self, data):
+        """Valida integridade do preço e existência de posto e tipo de combustível."""
+        posto = data.get('posto')
+        tipo_combustivel = data.get('tipo_combustivel')
+        novo_preco = data.get('preco')
 
-            # 1. Busca se já existe um preço ativo para esse combustível neste posto.
-            ultimo_preco_obj = AtualizacaoPreco.objects.filter(
-                posto=posto,
-                tipo_combustivel=tipo_combustivel,
-                status='ativo'
-            ).order_by('-data_hora').first()
+        ultimo_preco_obj = AtualizacaoPreco.objects.filter(
+            posto=posto,
+            tipo_combustivel=tipo_combustivel,
+            status='ativo'
+        ).order_by('-data_hora').first()
 
-            # 2. Se existir, define uma tolerância de 30% para evitar atualizações triviais.
-            if ultimo_preco_obj:
-                preco_atual = ultimo_preco_obj.preco
-                limite_superior = preco_atual * 1.3
-                limite_inferior = preco_atual * 0.7
-                
-                if novo_preco > limite_superior or novo_preco < limite_inferior:
-                    raise serializers.ValidationError({
-                        "preco": f"Valor suspeito. O preço atual é de R$ {preco_atual}"
-                    })
-
-            # 3. Se for o primeiro preço do posto, faz uma trava de validação para evitar preços absurdos.
-            else:
-                if novo_preco < Decimal('1.00') or novo_preco > Decimal('15.00'):
-                    raise serializers.ValidationError({
+        if ultimo_preco_obj:
+            preco_atual = ultimo_preco_obj.preco
+            limite_superior = preco_atual * Decimal('1.3')
+            limite_inferior = preco_atual * Decimal('0.7')
+            
+            if novo_preco > limite_superior or novo_preco < limite_inferior:
+                raise serializers.ValidationError({
+                    "preco": f"Valor suspeito. O preço atual é de R$ {preco_atual}"
+                })
+        else:
+            if novo_preco < Decimal('1.00') or novo_preco > Decimal('15.00'):
+                raise serializers.ValidationError({
                     "preco": "O valor informado está fora da realidade do mercado."
                 })
                 
-            return data
+        return data
 
 class HistoricoAtualizacaoSerializer(serializers.ModelSerializer):
     """Serializa os dados básicos para a tabela de histórico de preços."""
