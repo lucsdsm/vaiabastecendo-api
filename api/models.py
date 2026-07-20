@@ -4,6 +4,7 @@ from django.conf import settings
 from django.contrib.gis.db import models
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
+from django.db.models import F
 
 class Usuario(AbstractUser):
     pontos = models.IntegerField(default=0)
@@ -91,21 +92,24 @@ class Reacao(models.Model):
 @receiver(post_save, sender=Reacao)
 def processar_pontuacao_reacao(sender, instance, created, **kwargs):
     autor = instance.atualizacao.usuario
-    if autor:
-        if created:
-            autor.pontos += 1 if instance.tipo == 'like' else -1
-        else:
-            autor.pontos += 2 if instance.tipo == 'like' else -2
-        autor.save()
+    if not autor:
+        return
+
+    if created:
+        delta = 1 if instance.tipo == 'like' else -1
+    else:
+        delta = 2 if instance.tipo == 'like' else -2
+
+    Usuario.objects.filter(pk=autor.pk).update(pontos=F('pontos') + delta)
 
 # Quando o usuário clica novamente para remover o like (Delete)
 @receiver(post_delete, sender=Reacao)
 def reverter_pontuacao_reacao(sender, instance, **kwargs):
     autor = instance.atualizacao.usuario
-    
     if not autor:
         return
-        
-    # Faz o inverso direto no autor. Se apagou um like, perde 1 ponto.
-    autor.pontos = max(0, autor.pontos - 1)
-    autor.save()
+
+    delta = -1 if instance.tipo == 'like' else 1
+    Usuario.objects.filter(pk=autor.pk).update(
+        pontos=models.expressions.Greatest(F('pontos') + delta, 0)
+    )
