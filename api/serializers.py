@@ -1,13 +1,18 @@
-from rest_framework import serializers
-from django.contrib.auth import get_user_model
-from .models import Posto, TipoCombustivel, AtualizacaoPreco, Reacao
 from decimal import Decimal
-from django.db.models import OutRef, Subquery, Prefetch
+
+from django.contrib.auth import get_user_model
+from rest_framework import serializers
+
+from .models import AtualizacaoPreco, Posto, Reacao, TipoCombustivel
+
 
 User = get_user_model()
 
+
 class PostoSerializer(serializers.ModelSerializer):
-    """Serializa posto com preços atuais, autor da última atualização e reações."""
+    """
+    Serializa os dados de um posto com seus preços atuais e metadados de localização.
+    """
 
     latitude = serializers.SerializerMethodField()
     longitude = serializers.SerializerMethodField()
@@ -17,82 +22,112 @@ class PostoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Posto
-        fields = ['id', 'nome', 'endereco', 'bandeira', 'avaliacao', 'latitude', 'longitude', 'distancia_metros', 'precos_atuais', 
-        'autor_ultima_atualizacao']
+        fields = [
+            'id',
+            'nome',
+            'endereco',
+            'bandeira',
+            'avaliacao',
+            'latitude',
+            'longitude',
+            'distancia_metros',
+            'precos_atuais',
+            'autor_ultima_atualizacao',
+        ]
 
     def get_latitude(self, obj):
-        """Retorna latitude a partir do ponto geográfico do posto."""
         return obj.localizacao.y if obj.localizacao else None
 
     def get_longitude(self, obj):
-        """Retorna longitude a partir do ponto geográfico do posto."""
         return obj.localizacao.x if obj.localizacao else None
 
     def get_distancia_metros(self, obj):
-        """Usa distância já anotada na queryset quando disponível."""
         if hasattr(obj, 'distancia_calculada') and obj.distancia_calculada:
             return obj.distancia_calculada.m
         return None
 
+    def _get_atualizacoes_ativas(self, obj):
+        """
+        Retorna as atualizações ativas já prefetchadas, reutilizando cache local
+        no objeto quando disponível.
+        """
+        cache_attr = '_cached_atualizacoes_ativas'
+
+        if not hasattr(obj, cache_attr):
+            setattr(obj, cache_attr, list(obj.atualizacoes.all()))
+
+        return getattr(obj, cache_attr)
+
     def get_autor_ultima_atualizacao(self, obj):
-        """Expõe autor da atualização ativa mais recente para o posto, incluindo status de verificado."""
-        ultima_atualizacao = obj.atualizacoes.filter(status='ativo').order_by('-data_hora').first()
-        
-        if ultima_atualizacao and ultima_atualizacao.usuario:
+        """
+        Retorna o autor da atualização mais recente do posto.
+        """
+        atualizacoes = self._get_atualizacoes_ativas(obj)
+
+        if not atualizacoes:
+            return {
+                "nome": "Anônimo",
+                "verificado": False,
+            }
+
+        ultima_atualizacao = atualizacoes[0]
+
+        if ultima_atualizacao.usuario:
             usuario = ultima_atualizacao.usuario
             return {
                 "nome": usuario.username,
-                "verificado": usuario.pontos >= 100 
+                "verificado": usuario.pontos >= 100,
             }
-            
+
         return {
             "nome": "Anônimo",
-            "verificado": False
+            "verificado": False,
         }
 
     def get_precos_atuais(self, obj):
-        """Retorna um snapshot com o último preço ativo de cada tipo, incluindo suas reações individuais."""
-        # Pega o usuário logado a partir do contexto do request (injetado pelo ViewSet)
+        """
+        Monta o snapshot do preço mais recente de cada tipo de combustível.
+        """
         request = self.context.get('request')
         usuario_logado = (
-            request.user 
-            if request and hasattr(request, 'user') and request.user.is_authenticated 
+            request.user
+            if request and hasattr(request, 'user') and request.user.is_authenticated
             else None
         )
 
-        # Subquery para pegar o ID da última atualização ativa por tipo
-        ultima_por_tipo = AtualizacaoPreco.objects.filter(
-            posto=obj,
-            tipo_combustivel=OuterRef('tipo_combustivel'),
-            status='ativo'
-        ).order_by('-data_hora').values('id')[:1]
+        tipos_combustivel = self.context.get('tipos_combustivel')
+        if tipos_combustivel is None:
+            tipos_combustivel = list(TipoCombustivel.objects.all())
 
-        # Busca todas as últimas atualizações do posto de uma vez
-        ultimas_atualizacoes = (
-            AtualizacaoPreco.objects
-            .filter(posto=obj, status='ativo', id__in=Subquery(
-                AtualizacaoPreco.objects
-                .filter(posto=obj, status='ativo')
-                .order_by('tipo_combustivel', '-data_hora')
-                .distinct('tipo_combustivel')
-                .values('id')
-            ))
-            .select_related('tipo_combustivel')
-            .prefetch_related('reacoes')
-        )
+        atualizacoes = self._get_atualizacoes_ativas(obj)
+
+        ultima_atualizacao_por_tipo = {}
+        for atualizacao in atualizacoes:
+            tipo_id = atualizacao.tipo_combustivel_id
+            if tipo_id not in ultima_atualizacao_por_tipo:
+                ultima_atualizacao_por_tipo[tipo_id] = atualizacao
 
         lista_precos = []
-        for atualizacao in ultimas_atualizacoes:
-            total_likes = sum(1 for r in atualizacao.reacoes.all() if r.tipo == 'like')
-            usuario_curtiu = (
-                any(r.usuario_id == usuario_logado.pk for r in atualizacao.reacoes.all())
-                if usuario_logado else False
-            )
+
+        for tipo in tipos_combustivel:
+            atualizacao = ultima_atualizacao_por_tipo.get(tipo.id)
+            if not atualizacao:
+                continue
+
+            reacoes = list(atualizacao.reacoes.all())
+            total_likes = sum(1 for reacao in reacoes if reacao.tipo == 'like')
+
+            usuario_curtiu = False
+            if usuario_logado:
+                usuario_curtiu = any(
+                    reacao.tipo == 'like' and reacao.usuario_id == usuario_logado.id
+                    for reacao in reacoes
+                )
 
             lista_precos.append({
                 'id': atualizacao.id,
-                'tipo': atualizacao.tipo_combustivel.nome,
-                'cor': atualizacao.tipo_combustivel.cor,
+                'tipo': tipo.nome,
+                'cor': tipo.cor,
                 'preco': float(atualizacao.preco),
                 'data': atualizacao.data_hora,
                 'likes': total_likes,
@@ -101,19 +136,31 @@ class PostoSerializer(serializers.ModelSerializer):
 
         return lista_precos
 
+
 class TipoCombustivelSerializer(serializers.ModelSerializer):
+    """
+    Serializa os metadados do tipo de combustível.
+    """
+
     class Meta:
         model = TipoCombustivel
         fields = ['id', 'nome', 'cor']
 
+
 class AtualizacaoPrecoSerializer(serializers.ModelSerializer):
+    """
+    Serializa uma atualização de preço e aplica validações de consistência.
+    """
+
     class Meta:
         model = AtualizacaoPreco
         fields = ['id', 'posto', 'tipo_combustivel', 'preco', 'usuario', 'data_hora', 'status']
         read_only_fields = ['usuario', 'data_hora', 'status']
 
     def validate(self, data):
-        """Valida integridade do preço e existência de posto e tipo de combustível."""
+        """
+        Valida a faixa aceitável do preço com base no último valor ativo.
+        """
         posto = data.get('posto')
         tipo_combustivel = data.get('tipo_combustivel')
         novo_preco = data.get('preco')
@@ -121,14 +168,14 @@ class AtualizacaoPrecoSerializer(serializers.ModelSerializer):
         ultimo_preco_obj = AtualizacaoPreco.objects.filter(
             posto=posto,
             tipo_combustivel=tipo_combustivel,
-            status='ativo'
+            status='ativo',
         ).order_by('-data_hora').first()
 
         if ultimo_preco_obj:
             preco_atual = ultimo_preco_obj.preco
             limite_superior = preco_atual * Decimal('1.3')
             limite_inferior = preco_atual * Decimal('0.7')
-            
+
             if novo_preco > limite_superior or novo_preco < limite_inferior:
                 raise serializers.ValidationError({
                     "preco": f"Valor suspeito. O preço atual é de R$ {preco_atual}"
@@ -138,26 +185,32 @@ class AtualizacaoPrecoSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({
                     "preco": "O valor informado está fora da realidade do mercado."
                 })
-                
+
         return data
 
+
 class HistoricoAtualizacaoSerializer(serializers.ModelSerializer):
-    """Serializa os dados básicos para a tabela de histórico de preços."""
+    """
+    Serializa os dados necessários para listagem de histórico de preços.
+    """
 
     tipo_combustivel = serializers.CharField(source='tipo_combustivel.nome', read_only=True)
-    autor = serializers.CharField(source='usuario.username', default='Anônimo', read_only=True)
+    autor = serializers.SerializerMethodField()
 
     class Meta:
         model = AtualizacaoPreco
         fields = ['id', 'tipo_combustivel', 'preco', 'data_hora', 'autor']
 
     def get_autor(self, obj):
-        if obj.usuario:
-            return obj.usuario.username
-        return "Anônimo"
+        return obj.usuario.username if obj.usuario else "Anônimo"
+
 
 class ReacaoSerializer(serializers.ModelSerializer):
+    """
+    Serializa as reações vinculadas a uma atualização de preço.
+    """
+
     class Meta:
         model = Reacao
         fields = ['id', 'atualizacao', 'usuario', 'tipo']
-        read_only_fields = ['usuario'] 
+        read_only_fields = ['usuario']

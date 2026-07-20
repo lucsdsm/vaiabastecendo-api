@@ -1,31 +1,43 @@
-from django.db import models
-from django.contrib.auth.models import AbstractUser
 from django.conf import settings
+from django.contrib.auth.models import AbstractUser
 from django.contrib.gis.db import models
-from django.db.models.signals import post_save, post_delete
+from django.db.models import Case, F, IntegerField, UniqueConstraint, Value, When
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
-from django.db.models import F
+
 
 class Usuario(AbstractUser):
+    """
+    Modelo de usuário customizado da aplicação.
+
+    Armazena a pontuação acumulada do usuário com base nas reações recebidas
+    nas atualizações de preço publicadas por ele.
+    """
+
     pontos = models.IntegerField(default=0)
 
     class Meta:
         verbose_name = "Usuário"
         verbose_name_plural = "Usuários"
-    
+
     @property
     def verificado(self):
+        """
+        Indica se o usuário já atingiu a pontuação mínima para verificação.
+        """
         return self.pontos >= 100
 
+
 class Posto(models.Model):
-    place_id = models.CharField(max_length=255, unique=True, null=True, blank=True)  # Armazena o place_id do Google Places para evitar duplicatas
+    """
+    Representa um posto de combustível disponível na plataforma.
+    """
+
+    place_id = models.CharField(max_length=255, unique=True, null=True, blank=True)
     nome = models.CharField(max_length=255)
-    localizacao = models.PointField(srid=4326, geography=True)  # Usando PointField para armazenar latitude e longitude
+    localizacao = models.PointField(srid=4326, geography=True)
     endereco = models.CharField(max_length=255)
-    bandeira = models.CharField(
-        max_length=50, 
-        default='Bandeira Branca' # Se não identificar, assume que é independente
-    )
+    bandeira = models.CharField(max_length=50, default='Bandeira Branca')
     avaliacao = models.FloatField(null=True, blank=True)
 
     class Meta:
@@ -35,7 +47,12 @@ class Posto(models.Model):
     def __str__(self):
         return self.nome
 
+
 class TipoCombustivel(models.Model):
+    """
+    Define os tipos de combustível e seus metadados visuais.
+    """
+
     nome = models.CharField(max_length=50)
     cor = models.CharField(max_length=7, default='#000000')
     order = models.IntegerField(default=0)
@@ -48,17 +65,22 @@ class TipoCombustivel(models.Model):
     def __str__(self):
         return self.nome
 
-class AtualizacaoPreco(models.Model):
-    # on_delete define o comportamento quando um posto é deletado. CASCADE significa que as atualizações relacionadas também serão deletadas.
-    posto = models.ForeignKey(Posto, on_delete=models.CASCADE, related_name='atualizacoes')
 
-    # se um usuário for deletado, o campo 'usuario' será definido como NULL, mas a atualização de preço permanecerá.
-    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='atualizacoes_feitas')
-    
+class AtualizacaoPreco(models.Model):
+    """
+    Representa uma atualização de preço enviada por um usuário para um posto
+    e um tipo de combustível específicos.
+    """
+
+    posto = models.ForeignKey(Posto, on_delete=models.CASCADE, related_name='atualizacoes')
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='atualizacoes_feitas'
+    )
     tipo_combustivel = models.ForeignKey(TipoCombustivel, on_delete=models.CASCADE)
     preco = models.DecimalField(max_digits=5, decimal_places=2)
-    
-    # preenche automaticamente com a data/hora do servidor no momento da criação
     data_hora = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, default='ativo')
 
@@ -69,28 +91,62 @@ class AtualizacaoPreco(models.Model):
     def __str__(self):
         return f"{self.posto.nome} - {self.tipo_combustivel.nome} - R$ {self.preco}"
 
+
 class Reacao(models.Model):
+    """
+    Representa a reação de um usuário a uma atualização de preço.
+    """
+
     TIPO_CHOICES = (
         ('like', 'Like'),
         ('dislike', 'Dislike'),
     )
-    atualizacao = models.ForeignKey(AtualizacaoPreco, on_delete=models.CASCADE, related_name='reacoes')
-    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='reacoes_dadas')
+
+    atualizacao = models.ForeignKey(
+        AtualizacaoPreco,
+        on_delete=models.CASCADE,
+        related_name='reacoes'
+    )
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='reacoes_dadas'
+    )
     tipo = models.CharField(max_length=10, choices=TIPO_CHOICES)
 
-    # usuário só pode reagir uma vez a uma atualização específica
     class Meta:
         verbose_name = "Reação"
         verbose_name_plural = "Reações"
-
-        unique_together = ('atualizacao', 'usuario')
+        constraints = [
+            UniqueConstraint(
+                fields=['atualizacao', 'usuario'],
+                name='unique_reacao_por_usuario_em_atualizacao'
+            )
+        ]
 
     def __str__(self):
         return f"{self.usuario.username} - {self.tipo} em {self.atualizacao.id}"
 
-# Quando uma Reação é criada ou alterada, atualiza os pontos do usuário que fez a atualização de preço
+
+def _atualizar_pontos_usuario(usuario_id, delta):
+    """
+    Atualiza a pontuação do usuário de forma atômica, impedindo valores negativos.
+    """
+    Usuario.objects.filter(pk=usuario_id).update(
+        pontos=Case(
+            When(pontos__lte=-delta, then=Value(0)),
+            default=F('pontos') + delta,
+            output_field=IntegerField(),
+        )
+    )
+
+
 @receiver(post_save, sender=Reacao)
 def processar_pontuacao_reacao(sender, instance, created, **kwargs):
+    """
+    Atualiza a pontuação do autor da atualização quando uma reação é criada
+    ou quando uma reação existente muda de tipo.
+    """
     autor = instance.atualizacao.usuario
     if not autor:
         return
@@ -100,16 +156,17 @@ def processar_pontuacao_reacao(sender, instance, created, **kwargs):
     else:
         delta = 2 if instance.tipo == 'like' else -2
 
-    Usuario.objects.filter(pk=autor.pk).update(pontos=F('pontos') + delta)
+    _atualizar_pontos_usuario(autor.pk, delta)
 
-# Quando o usuário clica novamente para remover o like (Delete)
+
 @receiver(post_delete, sender=Reacao)
 def reverter_pontuacao_reacao(sender, instance, **kwargs):
+    """
+    Reverte a pontuação do autor quando uma reação é removida.
+    """
     autor = instance.atualizacao.usuario
     if not autor:
         return
 
     delta = -1 if instance.tipo == 'like' else 1
-    Usuario.objects.filter(pk=autor.pk).update(
-        pontos=models.expressions.Greatest(F('pontos') + delta, 0)
-    )
+    _atualizar_pontos_usuario(autor.pk, delta)
