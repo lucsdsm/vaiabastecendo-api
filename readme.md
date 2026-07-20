@@ -11,9 +11,9 @@ API RESTful construída para alimentar o aplicativo VaiAbastecendo. Conta com c�
 
 ## 📡 Endpoints
 
-* `GET /api/postos/`: Retorna a lista paginada de postos. Aceita `lat` e `lng` via query params para ordenar pela distância.
-* `GET /api/tipos-combustivel/`: Retorna os tipos disponíveis para o formulário do app.
-* `POST /api/atualizar-preco/`: Registra uma nova modificação de preço, atrelando ao usuário (se autenticado).
+* `GET /api/stations/`: Retorna a lista paginada de postos. Aceita `lat` e `lng` via query params para ordenar pela distância.
+* `GET /api/fuel-types/`: Retorna os tipos disponíveis para o formulário do app.
+* `POST /api/price-updates/`: Registra uma nova modificação de preço, atrelando ao usuário (se autenticado).
 
 ## 🚀 Localmente
 

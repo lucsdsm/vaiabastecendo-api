@@ -11,7 +11,7 @@ from api.models import AtualizacaoPreco, Posto, Reacao, TipoCombustivel
 from api.serializers import HistoricoAtualizacaoSerializer, PostoSerializer
 
 
-class PostoViewSet(viewsets.ModelViewSet):
+class StationViewSet(viewsets.ModelViewSet):
     """
     Expõe a listagem de postos com suporte a busca geográfica e histórico de preços.
     """
@@ -87,18 +87,18 @@ class PostoViewSet(viewsets.ModelViewSet):
         return context
 
     @action(detail=True, methods=['get'])
-    def historico(self, request, pk=None):
+    def history(self, request, pk=None):
         """
         Retorna as 20 últimas atualizações ativas de preço do posto.
         """
         posto = self.get_object()
 
-        historico = (
+        history = (
             posto.atualizacoes
             .filter(status='ativo')
             .select_related('usuario', 'tipo_combustivel')
             .order_by('-data_hora')[:20]
         )
 
-        serializer = HistoricoAtualizacaoSerializer(historico, many=True)
+        serializer = HistoricoAtualizacaoSerializer(history, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
