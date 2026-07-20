@@ -2,6 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import Posto, TipoCombustivel, AtualizacaoPreco, Reacao
 from decimal import Decimal
+from django.db.models import OutRef, Subquery, Prefetch
 
 User = get_user_model()
 
@@ -53,47 +54,52 @@ class PostoSerializer(serializers.ModelSerializer):
         """Retorna um snapshot com o último preço ativo de cada tipo, incluindo suas reações individuais."""
         # Pega o usuário logado a partir do contexto do request (injetado pelo ViewSet)
         request = self.context.get('request')
-        usuario_logado = request.user if request and hasattr(request, 'user') and request.user.is_authenticated else None
+        usuario_logado = (
+            request.user 
+            if request and hasattr(request, 'user') and request.user.is_authenticated 
+            else None
+        )
 
-        tipos = TipoCombustivel.objects.all()
+        # Subquery para pegar o ID da última atualização ativa por tipo
+        ultima_por_tipo = AtualizacaoPreco.objects.filter(
+            posto=obj,
+            tipo_combustivel=OuterRef('tipo_combustivel'),
+            status='ativo'
+        ).order_by('-data_hora').values('id')[:1]
+
+        # Busca todas as últimas atualizações do posto de uma vez
+        ultimas_atualizacoes = (
+            AtualizacaoPreco.objects
+            .filter(posto=obj, status='ativo', id__in=Subquery(
+                AtualizacaoPreco.objects
+                .filter(posto=obj, status='ativo')
+                .order_by('tipo_combustivel', '-data_hora')
+                .distinct('tipo_combustivel')
+                .values('id')
+            ))
+            .select_related('tipo_combustivel')
+            .prefetch_related('reacoes')
+        )
+
         lista_precos = []
-        
-        for tipo in tipos:
-            ultima_atualizacao = obj.atualizacoes.filter(tipo_combustivel=tipo, status='ativo').order_by('-data_hora').first()
-            
-            if ultima_atualizacao:
-                # Calcula as reações exclusivamente para essa atualização
-                total_likes = Reacao.objects.filter(atualizacao=ultima_atualizacao, tipo='like').count()
-                
-                # Verifica se o usuário logado curtiu essa atualização
-                usuario_curtiu = False
-                if usuario_logado:
-                    usuario_curtiu = Reacao.objects.filter(atualizacao=ultima_atualizacao, usuario=usuario_logado, tipo='like').exists()
+        for atualizacao in ultimas_atualizacoes:
+            total_likes = sum(1 for r in atualizacao.reacoes.all() if r.tipo == 'like')
+            usuario_curtiu = (
+                any(r.usuario_id == usuario_logado.pk for r in atualizacao.reacoes.all())
+                if usuario_logado else False
+            )
 
-                lista_precos.append({
-                    'id': ultima_atualizacao.id,
-                    'tipo': tipo.nome,
-                    'cor': tipo.cor,
-                    'preco': float(ultima_atualizacao.preco),
-                    'data': ultima_atualizacao.data_hora,
-                    'likes': total_likes,     
-                    'is_liked': usuario_curtiu
-                })
-                
+            lista_precos.append({
+                'id': atualizacao.id,
+                'tipo': atualizacao.tipo_combustivel.nome,
+                'cor': atualizacao.tipo_combustivel.cor,
+                'preco': float(atualizacao.preco),
+                'data': atualizacao.data_hora,
+                'likes': total_likes,
+                'is_liked': usuario_curtiu,
+            })
+
         return lista_precos
-
-    def get_likes(self, obj):
-        """Conta reações positivas vinculadas às atualizações do posto."""
-        return Reacao.objects.filter(atualizacao__posto=obj, tipo='like').count()
-    
-    def get_is_liked(self, obj):
-        """Indica se o usuário autenticado curtiu alguma atualização do posto."""
-        request = self.context.get('request')
-
-        if request and hasattr(request, 'user') and request.user.is_authenticated:
-            return Reacao.objects.filter(atualizacao__posto=obj, usuario=request.user, tipo='like').exists()
-        
-        return False
 
 class TipoCombustivelSerializer(serializers.ModelSerializer):
     class Meta:
