@@ -7,8 +7,8 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
-from api.models import AtualizacaoPreco, Posto, Reacao, TipoCombustivel
-from api.serializers import HistoricoAtualizacaoSerializer, PostoSerializer
+from api.models import FuelType, PriceUpdate, Reaction, Station
+from api.serializers import PriceUpdateHistorySerializer, StationSerializer
 
 
 class StationViewSet(viewsets.ModelViewSet):
@@ -16,7 +16,7 @@ class StationViewSet(viewsets.ModelViewSet):
     Expõe a listagem de postos com suporte a busca geográfica e histórico de preços.
     """
 
-    serializer_class = PostoSerializer
+    serializer_class = StationSerializer
 
     def _get_user_location(self):
         """
@@ -43,24 +43,24 @@ class StationViewSet(viewsets.ModelViewSet):
         Monta a queryset principal dos postos com prefetch das relações usadas
         na serialização.
         """
-        atualizacoes_ativas_qs = (
-            AtualizacaoPreco.objects
-            .filter(status='ativo')
-            .select_related('usuario', 'tipo_combustivel')
+        active_updates_queryset = (
+            PriceUpdate.objects
+            .filter(status='active')
+            .select_related('user', 'fuel_type')
             .prefetch_related(
                 Prefetch(
-                    'reacoes',
-                    queryset=Reacao.objects.select_related('usuario')
+                    'reactions',
+                    queryset=Reaction.objects.select_related('user')
                 )
             )
-            .order_by('-data_hora')
+            .order_by('-created_at')
         )
 
         queryset = (
-            Posto.objects
+            Station.objects
             .all()
             .prefetch_related(
-                Prefetch('atualizacoes', queryset=atualizacoes_ativas_qs)
+                Prefetch('price_updates', queryset=active_updates_queryset)
             )
         )
 
@@ -69,9 +69,9 @@ class StationViewSet(viewsets.ModelViewSet):
         if user_location:
             queryset = (
                 queryset
-                .filter(localizacao__dwithin=(user_location, D(km=10)))
-                .annotate(distancia_calculada=Distance('localizacao', user_location))
-                .order_by('distancia_calculada')
+                .filter(location__dwithin=(user_location, D(km=10)))
+                .annotate(calculated_distance=Distance('location', user_location))
+                .order_by('calculated_distance')
             )
         else:
             queryset = queryset.order_by('id')
@@ -83,7 +83,7 @@ class StationViewSet(viewsets.ModelViewSet):
         Injeta no contexto dados reutilizados por todos os itens serializados.
         """
         context = super().get_serializer_context()
-        context['tipos_combustivel'] = list(TipoCombustivel.objects.all())
+        context['fuel_types'] = list(FuelType.objects.all())
         return context
 
     @action(detail=True, methods=['get'])
@@ -91,14 +91,14 @@ class StationViewSet(viewsets.ModelViewSet):
         """
         Retorna as 20 últimas atualizações ativas de preço do posto.
         """
-        posto = self.get_object()
+        station = self.get_object()
 
         history = (
-            posto.atualizacoes
-            .filter(status='ativo')
-            .select_related('usuario', 'tipo_combustivel')
-            .order_by('-data_hora')[:20]
+            station.price_updates
+            .filter(status='active')
+            .select_related('user', 'fuel_type')
+            .order_by('-created_at')[:20]
         )
 
-        serializer = HistoricoAtualizacaoSerializer(history, many=True)
+        serializer = PriceUpdateHistorySerializer(history, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)

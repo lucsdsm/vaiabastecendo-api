@@ -1,33 +1,34 @@
 import csv
+
+from django.contrib.auth.admin import UserAdmin
+from django.contrib.gis import admin
 from django.http import HttpResponse
 
-from django.contrib.gis import admin
-from django.contrib.auth.models import AbstractUser
-from .models import Usuario, Posto, TipoCombustivel, AtualizacaoPreco, Reacao
-from django.db import models
-from django.contrib.auth.admin import UserAdmin
+from .models import FuelType, PriceUpdate, Reaction, Station, User
+
 
 @admin.action(description='Exportar postos selecionados para CSV')
-def exportar_para_csv(modeladmin, request, queryset):
-    # Cria a resposta HTTP com o tipo de arquivo correto
+def export_selected_stations_to_csv(modeladmin, request, queryset):
+    """
+    Exporta os postos selecionados no admin para um arquivo CSV.
+    """
     response = HttpResponse(content_type='text/csv; charset=utf-8')
-    response['Content-Disposition'] = 'attachment; filename="postos_selecionados.csv"'
-    
+    response['Content-Disposition'] = 'attachment; filename="stations.csv"'
+
     writer = csv.writer(response)
-    # Escreve o cabeçalho
-    writer.writerow(['id', 'nome', 'bandeira', 'endereco', 'avaliacao'])
-    
-    # Escreve os dados dos postos que você marquei na tela
-    for posto in queryset:
-        writer.writerow([posto.id, posto.nome, posto.bandeira, posto.endereco])
-        
+    writer.writerow(['id', 'name', 'brand', 'address', 'rating'])
+
+    for station in queryset:
+        writer.writerow([station.id, station.name, station.brand, station.address, station.rating])
+
     return response
 
-@admin.register(Posto)
-class PostoAdmin(admin.GISModelAdmin): 
-    list_display = ('place_id', 'nome', 'endereco', 'bandeira', 'avaliacao')
-    search_fields = ('place_id', 'nome', 'endereco', 'bandeira')
-    actions = [exportar_para_csv]
+
+@admin.register(Station)
+class StationAdmin(admin.GISModelAdmin):
+    list_display = ('place_id', 'name', 'address', 'brand', 'rating')
+    search_fields = ('place_id', 'name', 'address', 'brand')
+    actions = [export_selected_stations_to_csv]
 
     gis_widget_kwargs = {
         'attrs': {
@@ -37,15 +38,19 @@ class PostoAdmin(admin.GISModelAdmin):
         }
     }
 
-class CustomUserAdmin(UserAdmin):
-    # Adiciona o campo pontos na tela de edição do usuário
-    fieldsets = UserAdmin.fieldsets + (
-        ('Gamificação', {'fields': ('pontos',)}),
-    )
-    # Mostra os pontos na lista geral de usuários
-    list_display = UserAdmin.list_display + ('pontos',)
 
-admin.site.register(TipoCombustivel)
-admin.site.register(Usuario)
-admin.site.register(AtualizacaoPreco)
-admin.site.register(Reacao)
+@admin.register(User)
+class CustomUserAdmin(UserAdmin):
+    """
+    Customiza a administração do usuário adicionando o campo de pontuação.
+    """
+
+    fieldsets = UserAdmin.fieldsets + (
+        ('Gamificação', {'fields': ('points',)}),
+    )
+    list_display = UserAdmin.list_display + ('points',)
+
+
+admin.site.register(FuelType)
+admin.site.register(PriceUpdate)
+admin.site.register(Reaction)

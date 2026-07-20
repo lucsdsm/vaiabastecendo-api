@@ -1,7 +1,7 @@
 from rest_framework import viewsets
 
-from api.models import TipoCombustivel
-from api.serializers import TipoCombustivelSerializer
+from api.models import FuelType
+from api.serializers import FuelTypeSerializer
 
 
 class FuelTypeViewSet(viewsets.ReadOnlyModelViewSet):
@@ -12,6 +12,6 @@ class FuelTypeViewSet(viewsets.ReadOnlyModelViewSet):
     como nome, cor e ordenação padrão definida no modelo.
     """
 
-    queryset = TipoCombustivel.objects.all()
-    serializer_class = TipoCombustivelSerializer
+    queryset = FuelType.objects.all()
+    serializer_class = FuelTypeSerializer
     pagination_class = None

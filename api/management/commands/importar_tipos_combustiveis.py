@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand
-from api.models import TipoCombustivel
+from api.models import FuelType
 
 class Command(BaseCommand):
     help = 'Importa tipos de combustíveis para o banco de dados'
@@ -7,22 +7,22 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         """Sincroniza catálogo fixo de combustíveis e cores padrão do app."""
         combustiveis = [
-            {'nome': 'Gasolina Comum', 'cor': '#ff8000'},  
-            {'nome': 'Gasolina Aditivada', 'cor': '#0000FF'},
-            {'nome': 'Gasolina Premium', 'cor': '#ffdd00'},
-            {'nome': 'Etanol Comum', 'cor': '#00FF00'},
-            {'nome': 'Etanol Aditivado', 'cor': '#008000'},
-            {'nome': 'Diesel Comum S10', 'cor': '#C0C0C0'},
-            {'nome': 'Diesel Aditivado S10', 'cor': '#808080'},
-            {'nome': 'Diesel Comum S500', 'cor': '#FF0000'},
-            {'nome': 'Diesel Aditivado S500', 'cor': '#000000'},   
-            {'nome': 'GNV', 'cor': '#FFFF00'},       
+            {'name': 'Gasolina Comum', 'color': '#ff8000'},  
+            {'name': 'Gasolina Aditivada', 'color': '#0000FF'},
+            {'name': 'Gasolina Premium', 'color': '#ffdd00'},
+            {'name': 'Etanol Comum', 'color': '#79964d'},
+            {'name': 'Etanol Aditivado', 'color': '#008000'},
+            {'name': 'Diesel Comum S10', 'color': '#C0C0C0'},
+            {'name': 'Diesel Aditivado S10', 'color': '#808080'},
+            {'name': 'Diesel Comum S500', 'color': '#FF0000'},
+            {'name': 'Diesel Aditivado S500', 'color': '#000000'},   
+            {'name': 'GNV', 'color': '#FFFF00'},       
         ]
 
         for combustivel in combustiveis:
-            TipoCombustivel.objects.update_or_create(
-                nome=combustivel['nome'],
-                defaults={'cor': combustivel['cor']}
+            FuelType.objects.update_or_create(
+                name=combustivel['name'],
+                defaults={'color': combustivel['color']}
             )
 
         self.stdout.write(self.style.SUCCESS('Tipos de combustíveis importados com sucesso!'))

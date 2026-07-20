@@ -6,7 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from api.models import Reacao
+from api.models import Reaction
 
 
 class GoogleLogin(SocialLoginView):
@@ -43,22 +43,22 @@ class UserProfileView(APIView):
 
     def get(self, request):
         """
-        Retorna o payload de perfil do usuário autenticado.
+        Retorna o payload de perfil do usuário autenticado com contrato em inglês.
         """
         user = request.user
         photo_url = self._get_google_photo_url(user)
 
-        likes_given = Reacao.objects.filter(usuario=user, tipo='like').count()
+        likes_given = Reaction.objects.filter(user=user, reaction_type='like').count()
 
         return Response({
             "id": user.id,
             "username": user.username,
-            "primeiro_nome": user.first_name,
-            "ultimo_nome": user.last_name,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
             "email": user.email,
-            "foto": photo_url,
-            "likes_recebidos": user.pontos,
-            "likes_deferidos": likes_given,
-            "pontos": user.pontos,
-            "verificado": user.verificado,
+            "photo": photo_url,
+            "likes_received": user.points,
+            "likes_given": likes_given,
+            "points": user.points,
+            "verified": user.verified,
         })

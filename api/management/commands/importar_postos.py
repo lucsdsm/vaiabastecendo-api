@@ -1,7 +1,7 @@
 import requests
 import time
 from django.core.management.base import BaseCommand
-from api.models import Posto
+from api.models import Station
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
 import environ
@@ -45,17 +45,7 @@ class Command(BaseCommand):
         
         # Estratégia de grade: Varremos por bairros para burlar o limite de 60 resultados do Google
         regioes = [
-            # 'Centro, Natal, RN',
-            # 'Alecrim, Natal, RN',
-            # 'Lagoa Nova, Natal, RN',
-            # 'Ponta Negra, Natal, RN',
-            # 'Capim Macio, Natal, RN',
-            # 'Tirol, Natal, RN',
-            # 'Igapó, Natal, RN',
-            # 'Nova Parnamirim, Parnamirim, RN',
-            # 'Centro, Parnamirim, RN'
-            # 'Nova Esperança, Parnamirim, RN',
-            # 'São José do Mipibu, RN',
+            'Emaús, Parnamirim, RN',
         ]
 
         total_geral_adicionado = 0
@@ -100,29 +90,29 @@ class Command(BaseCommand):
                     ponto_espacial = Point(float(lng), float(lat), srid=4326)
 
                     # Verificar se já existe um posto a menos de 30 metros para evitar duplicatas
-                    posto_existente = Posto.objects.filter(
-                        localizacao__distance_lte=(ponto_espacial, D(m=30))
+                    posto_existente = Station.objects.filter(
+                        location__distance_lte=(ponto_espacial, D(m=30))
                     ).first()
 
                     if posto_existente:
                         # Se já existe um posto colado nesse, apenas ignora o novo
                         continue
 
-                    posto, created = Posto.objects.update_or_create(
-                        localizacao=ponto_espacial,
+                    posto, created = Station.objects.update_or_create(
+                        location=ponto_espacial,
                         defaults={
                             'place_id': place.get('place_id', ''),
-                            'nome': place['name'],
-                            'endereco': place.get('formatted_address', ''),
-                            'bandeira': identificar_bandeira(place['name']),
-                            'avaliacao': place.get('rating', None)
+                            'name': place['name'],
+                            'address': place.get('formatted_address', ''),
+                            'brand': identificar_bandeira(place['name']),
+                            'rating': place.get('rating', None)
                         }
                     )
                     
                     if created:
                         adicionados_nesta_pagina += 1
                         total_geral_adicionado += 1
-                        self.stdout.write(f" + {posto.nome} cadastrado.")
+                        self.stdout.write(f" + {posto.name} cadastrado.")
 
                 next_page_token = response.get('next_page_token')
                 if not next_page_token:
