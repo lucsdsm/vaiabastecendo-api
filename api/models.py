@@ -39,6 +39,7 @@ class Station(models.Model):
     address = models.CharField(max_length=255)
     brand = models.CharField(max_length=50, default='Bandeira Branca')
     rating = models.FloatField(null=True, blank=True)
+    user_ratings_total = models.IntegerField(null=True, blank=True)
 
     class Meta:
         verbose_name = "Posto"
