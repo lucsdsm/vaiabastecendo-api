@@ -34,8 +34,11 @@ from api.models import Station
 env = environ.Env()
 
 regioes = [
+    # EXEMPLO COM BAIRRO + CIDADE
     # {'bairro': 'Alecrim', 'cidade': 'Natal', 'uf': 'RN', 'aliases': ['alecrim']},
-    {'cidade': 'São José de Mipibu', 'uf': 'RN', 'aliases': ['são josé de mipibu']},
+
+    # EXEMPLO COM CIDADE INTEIRA
+    # {'cidade': 'São José de Mipibu', 'uf': 'RN', 'aliases': ['são josé de mipibu']},
 ]
 
 BANDEIRAS = {
@@ -157,7 +160,6 @@ class Command(BaseCommand):
         return data
 
     def fetch_next_page(self, url, headers, regiao, center, token):
-        self.stdout.write(self.style.WARNING(f'nextPageToken: {token}'))
         for tentativa in range(1, 11):
             time.sleep(5 if tentativa == 1 else 3)
             status, data = self.fetch(url, headers, self.payload(regiao, center=center, page_token=token))
