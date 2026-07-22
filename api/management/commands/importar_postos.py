@@ -1,3 +1,24 @@
+"""
+Importa postos de combustível para o backend usando Places API (New).
+
+Suporta dois tipos de região:
+1. Bairro + cidade + UF
+   Ex.: {'bairro': 'Alecrim', 'cidade': 'Natal', 'uf': 'RN'}
+2. Cidade inteira + UF
+   Ex.: {'cidade': 'São José de Mipibu', 'uf': 'RN'}
+
+Comportamento:
+- Por padrão, cria apenas postos novos e ignora os já existentes.
+- Com --sync, atualiza registros existentes.
+- Com --dry-run, executa tudo em transação e desfaz ao final.
+
+Exemplos:
+    python manage.py importar_postos
+    python manage.py importar_postos --dry-run
+    python manage.py importar_postos --sync
+    python manage.py importar_postos --sync --dry-run
+"""
+
 import re
 import time
 import requests
@@ -6,213 +27,317 @@ import environ
 from django.core.management.base import BaseCommand
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
+from django.db import transaction
 
 from api.models import Station
 
-
 env = environ.Env()
 
+regioes = [
+    # {'bairro': 'Alecrim', 'cidade': 'Natal', 'uf': 'RN', 'aliases': ['alecrim']},
+    {'cidade': 'São José de Mipibu', 'uf': 'RN', 'aliases': ['são josé de mipibu']},
+]
 
-def identificar_bandeira(nome_posto):
-    """
-    Analisa o nome do posto e retorna a bandeira ou rede regional correspondente.
-    """
-    nome = str(nome_posto).lower()
+BANDEIRAS = {
+    'Petrobras': r'\b(petrobras|br)\b',
+    'Shell': r'\bshell\b',
+    'Ipiranga': r'\b(ipiranga|ampm)\b',
+    'Ale': r'\bale\b',
+    'Texaco': r'\btexaco\b',
+    'Pinheiro Borges': r'\bpinheiro borges\b',
+    'Cirne': r'\bcirne\b',
+    'Lemon': r'\blemon\b',
+    'Estrela': r'\bestrela\b',
+    'Posto Macaco': r'\bmacaco\b',
+    'Setta': r'\bsetta\b',
+}
 
-    regras = {
-        'Petrobras': r'\b(petrobras|br)\b',
-        'Shell': r'\bshell\b',
-        'Ipiranga': r'\b(ipiranga|ampm)\b',
-        'Ale': r'\bale\b',
-        'Texaco': r'\btexaco\b',
-        'Pinheiro Borges': r'\bpinheiro borges\b',
-        'Cirne': r'\bcirne\b',
-        'Lemon': r'\blemon\b',
-        'Estrela': r'\bestrela\b',
-        'Posto Macaco': r'\bmacaco\b',
-        'Setta': r'\bsetta\b',
-    }
 
-    for bandeira, padrao in regras.items():
+def identificar_bandeira(nome):
+    nome = str(nome).lower()
+    for bandeira, padrao in BANDEIRAS.items():
         if re.search(padrao, nome):
             return bandeira
-
     return 'Bandeira Branca'
 
 
 def place_score(place):
-    """
-    Score do resultado vindo da Places API.
-    Prioriza volume de avaliações e depois nota.
-    """
-    user_ratings_total = place.get('user_ratings_total') or 0
-    rating = place.get('rating') or 0
-    return (user_ratings_total, rating)
+    return (place.get('user_ratings_total') or 0, place.get('rating') or 0)
 
 
 def station_score(station):
-    """
-    Score do posto salvo no banco.
-    """
-    user_ratings_total = getattr(station, 'user_ratings_total', None) or 0
-    rating = station.rating or 0
-    return (user_ratings_total, rating)
-
-
-def should_replace_station(existing_station, incoming_place):
-    """
-    Decide se o posto novo deve substituir o existente.
-    """
-    return place_score(incoming_place) > station_score(existing_station)
+    return (getattr(station, 'user_ratings_total', None) or 0, station.rating or 0)
 
 
 class Command(BaseCommand):
-    help = 'Busca postos varrendo regiões específicas via Google Places'
+    help = 'Importa postos via Places Text Search (New), com suporte a bairros e cidades inteiras.'
 
-    def handle(self, *args, **options):
+    def add_arguments(self, parser):
+        parser.add_argument('--dry-run', action='store_true', help='Simula sem persistir alterações.')
+        parser.add_argument('--sync', action='store_true', help='Atualiza registros existentes em vez de apenas ignorá-los.')
+
+    def headers(self, api_key):
+        return {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': api_key,
+            'X-Goog-FieldMask': ','.join([
+                'places.id',
+                'places.displayName',
+                'places.formattedAddress',
+                'places.location',
+                'places.rating',
+                'places.userRatingCount',
+                'places.types',
+                'nextPageToken',
+            ]),
+        }
+
+    def has_bairro(self, regiao):
+        return bool(regiao.get('bairro'))
+
+    def region_label(self, regiao):
+        if self.has_bairro(regiao):
+            return f"{regiao['bairro']}, {regiao['cidade']}, {regiao['uf']}"
+        return f"{regiao['cidade']}, {regiao['uf']}"
+
+    def fetch(self, url, headers, payload):
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        return response.status_code, response.json()
+
+    def geocode_region(self, url, headers, regiao):
+        payload = {
+            'textQuery': self.region_label(regiao),
+            'languageCode': 'pt-BR',
+            'regionCode': 'br',
+            'pageSize': 1,
+        }
+        status, data = self.fetch(url, headers, payload)
+        if status != 200:
+            self.stdout.write(self.style.ERROR(
+                f"Não foi possível geocodificar {self.region_label(regiao)}: HTTP {status} - {data}"
+            ))
+            return None
+
+        places = data.get('places', [])
+        if not places:
+            self.stdout.write(self.style.WARNING(
+                f"Nenhum ponto encontrado para {self.region_label(regiao)}. Seguindo sem viés geográfico."
+            ))
+            return None
+
+        location = (places[0].get('location') or {})
+        lat = location.get('latitude')
+        lng = location.get('longitude')
+        if lat is None or lng is None:
+            return None
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Centro aproximado de {self.region_label(regiao)}: lat={lat}, lng={lng}"
+        ))
+        return {'latitude': lat, 'longitude': lng}
+
+    def payload(self, regiao, center=None, page_token=None):
+        data = {
+            'textQuery': f"postos de combustível em {self.region_label(regiao)}",
+            'languageCode': 'pt-BR',
+            'regionCode': 'br',
+            'pageSize': 20,
+            'includedType': 'gas_station',
+            'strictTypeFiltering': True,
+        }
+        if center:
+            data['locationBias'] = {
+                'circle': {
+                    'center': center,
+                    'radius': 4000.0 if self.has_bairro(regiao) else 7000.0,
+                }
+            }
+        if page_token:
+            data['pageToken'] = page_token
+        return data
+
+    def fetch_next_page(self, url, headers, regiao, center, token):
+        self.stdout.write(self.style.WARNING(f'nextPageToken: {token}'))
+        for tentativa in range(1, 11):
+            time.sleep(5 if tentativa == 1 else 3)
+            status, data = self.fetch(url, headers, self.payload(regiao, center=center, page_token=token))
+            if status == 200:
+                return data
+            self.stdout.write(f'Tentativa {tentativa}/10 para próxima página falhou (HTTP {status}).')
+        return None
+
+    def normalize_text(self, value):
+        return re.sub(r'\s+', ' ', (value or '').strip().lower())
+
+    def normalize_place(self, raw):
+        display_name = raw.get('displayName') or {}
+        location = raw.get('location') or {}
+        return {
+            'place_id': raw.get('id'),
+            'name': display_name.get('text', 'Posto sem nome'),
+            'address': raw.get('formattedAddress', ''),
+            'lat': location.get('latitude'),
+            'lng': location.get('longitude'),
+            'rating': raw.get('rating'),
+            'user_ratings_total': raw.get('userRatingCount'),
+            'types': raw.get('types', []),
+        }
+
+    def address_matches_region(self, address, regiao):
+        address = self.normalize_text(address)
+        cidade = self.normalize_text(regiao['cidade'])
+        uf = self.normalize_text(regiao['uf'])
+        aliases = [self.normalize_text(a) for a in regiao.get('aliases', [])]
+
+        if cidade not in address or uf not in address:
+            return False
+
+        if not self.has_bairro(regiao):
+            return True
+
+        if not aliases:
+            aliases = [self.normalize_text(regiao['bairro'])]
+
+        return any(alias in address for alias in aliases)
+
+    def is_valid_place(self, place, regiao):
+        if place['lat'] is None or place['lng'] is None:
+            return False
+        if 'gas_station' not in place.get('types', []):
+            return False
+        if not self.address_matches_region(place['address'], regiao):
+            return False
+        return True
+
+    def build_defaults(self, place):
+        return {
+            'place_id': place['place_id'] or '',
+            'name': place['name'],
+            'address': place['address'],
+            'brand': identificar_bandeira(place['name']),
+            'rating': place['rating'],
+            'user_ratings_total': place['user_ratings_total'],
+            'location': Point(float(place['lng']), float(place['lat']), srid=4326),
+        }
+
+    def apply_updates(self, station, defaults):
+        for field, value in defaults.items():
+            setattr(station, field, value)
+        station.save()
+
+    def remove_duplicates(self, duplicates):
+        for station in duplicates:
+            station.delete()
+        return len(duplicates)
+
+    def process_place(self, place, sync=False):
+        defaults = self.build_defaults(place)
+        place_id = place['place_id']
+
+        if place_id:
+            existing = Station.objects.filter(place_id=place_id).first()
+            if existing:
+                if sync:
+                    self.apply_updates(existing, defaults)
+                    return 'updated', existing.name, 0
+                return 'ignored', existing.name, 0
+
+        nearby = list(Station.objects.filter(location__distance_lte=(defaults['location'], D(m=30))))
+        if not nearby:
+            station = Station.objects.create(**defaults)
+            return 'created', station.name, 0
+
+        best = max(nearby, key=station_score)
+        duplicates = [s for s in nearby if s.id != best.id]
+
+        if sync and place_score(place) > station_score(best):
+            self.apply_updates(best, defaults)
+            removed = self.remove_duplicates(duplicates)
+            return 'updated', best.name, removed
+
+        removed = self.remove_duplicates(duplicates)
+        return 'ignored', place['name'], removed
+
+    def run_import(self, dry_run=False, sync=False):
         api_key = env('PLACES_API_KEY')
-        url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
+        url = 'https://places.googleapis.com/v1/places:searchText'
+        headers = self.headers(api_key)
 
-        regioes = [
-            'Emaús, Parnamirim, RN',
-        ]
-
-        total_geral_adicionado = 0
-        total_geral_atualizado = 0
-        total_geral_ignorados = 0
-        total_geral_duplicados_removidos = 0
+        totals = {'created': 0, 'updated': 0, 'ignored': 0, 'duplicates_removed': 0, 'filtered_out': 0}
 
         for regiao in regioes:
-            self.stdout.write(self.style.WARNING(f'\n--- Iniciando busca em: {regiao} ---'))
+            nome_regiao = self.region_label(regiao)
+            self.stdout.write(self.style.WARNING(f'\n--- Iniciando busca em: {nome_regiao} ---'))
+            if dry_run:
+                self.stdout.write(self.style.WARNING('MODO SIMULAÇÃO ATIVO: alterações serão desfeitas ao final.'))
+            if sync:
+                self.stdout.write(self.style.WARNING('MODO SYNC ATIVO: registros existentes poderão ser atualizados.'))
 
-            params = {
-                'query': f'postos de combustível em {regiao}',
-                'key': api_key,
-                'language': 'pt-BR',
-            }
+            center = self.geocode_region(url, headers, regiao)
+            counters = {'created': 0, 'updated': 0, 'ignored': 0, 'duplicates_removed': 0, 'filtered_out': 0}
 
-            tentativas_invalidas = 0
+            status, response = self.fetch(url, headers, self.payload(regiao, center=center))
+            if status != 200:
+                self.stdout.write(self.style.ERROR(f'Erro na API para {nome_regiao}: HTTP {status} - {response}'))
+                continue
 
+            page = 1
             while True:
-                response = requests.get(url, params=params, timeout=30).json()
-                status = response.get('status')
+                places = response.get('places', [])
+                self.stdout.write(f'Resultados na página {page} ({nome_regiao}): {len(places)}')
 
-                if status == 'INVALID_REQUEST':
-                    tentativas_invalidas += 1
-                    if tentativas_invalidas > 5:
-                        self.stdout.write(
-                            self.style.ERROR('Falha crítica no token. Pulando para a próxima região.')
-                        )
-                        break
+                for raw_place in places:
+                    place = self.normalize_place(raw_place)
 
-                    self.stdout.write('Token ainda imaturo. Aguardando mais 2 segundos...')
-                    time.sleep(2)
-                    continue
-
-                tentativas_invalidas = 0
-
-                if status not in ['OK', 'ZERO_RESULTS']:
-                    self.stdout.write(self.style.ERROR(f"Erro na API: {status}"))
-                    break
-
-                results = response.get('results', [])
-
-                for place in results:
-                    geometry = place.get('geometry', {}).get('location', {})
-                    lat = geometry.get('lat')
-                    lng = geometry.get('lng')
-
-                    if lat is None or lng is None:
-                        self.stdout.write(
-                            self.style.WARNING(f" - Resultado ignorado sem coordenadas válidas: {place.get('name', 'Sem nome')}")
-                        )
-                        total_geral_ignorados += 1
+                    if not self.is_valid_place(place, regiao):
+                        counters['filtered_out'] += 1
+                        totals['filtered_out'] += 1
+                        self.stdout.write(f" - Filtrado fora da região: {place['name']} | {place['address']}")
                         continue
 
-                    ponto_espacial = Point(float(lng), float(lat), srid=4326)
-                    place_id = place.get('place_id')
+                    action, name, removed = self.process_place(place, sync=sync)
+                    counters[action] += 1
+                    totals[action] += 1
+                    counters['duplicates_removed'] += removed
+                    totals['duplicates_removed'] += removed
 
-                    defaults = {
-                        'place_id': place_id or '',
-                        'name': place.get('name', 'Posto sem nome'),
-                        'address': place.get('formatted_address', ''),
-                        'brand': identificar_bandeira(place.get('name', '')),
-                        'rating': place.get('rating'),
-                        'user_ratings_total': place.get('user_ratings_total'),
-                        'location': ponto_espacial,
-                    }
-
-                    # 1) Prioridade máxima: se já existe pelo mesmo place_id, atualiza esse registro.
-                    if place_id:
-                        posto_por_place_id = Station.objects.filter(place_id=place_id).first()
-                        if posto_por_place_id:
-                            for field, value in defaults.items():
-                                setattr(posto_por_place_id, field, value)
-                            posto_por_place_id.save()
-
-                            total_geral_atualizado += 1
-                            self.stdout.write(f" ~ Atualizado por place_id: {posto_por_place_id.name}")
-                            continue
-
-                    # 2) Se não encontrou por place_id, procura duplicados por proximidade.
-                    postos_proximos = list(
-                        Station.objects.filter(
-                            location__distance_lte=(ponto_espacial, D(m=30))
-                        )
-                    )
-
-                    if not postos_proximos:
-                        posto = Station.objects.create(**defaults)
-                        total_geral_adicionado += 1
-                        self.stdout.write(f" + {posto.name} cadastrado.")
-                        continue
-
-                    # 3) Se houver mais de um posto próximo, mantém o melhor já salvo.
-                    melhor_existente = max(postos_proximos, key=station_score)
-
-                    # 4) Decide se o novo resultado é melhor que o melhor existente.
-                    if should_replace_station(melhor_existente, place):
-                        for field, value in defaults.items():
-                            setattr(melhor_existente, field, value)
-                        melhor_existente.save()
-
-                        total_geral_atualizado += 1
-                        self.stdout.write(
-                            f" ~ Posto próximo substituído por melhor avaliação: {melhor_existente.name}"
-                        )
+                    if action == 'created':
+                        self.stdout.write(f' + {name} cadastrado.')
+                    elif action == 'updated':
+                        self.stdout.write(f' ~ Atualizado: {name}')
                     else:
-                        total_geral_ignorados += 1
-                        self.stdout.write(
-                            f" - Ignorado '{place.get('name', 'Sem nome')}' pois já existe posto melhor avaliado nas proximidades."
-                        )
+                        self.stdout.write(f" - Ignorado '{name}' pois já existe posto correspondente.")
 
-                    # 5) Limpeza: remove duplicados antigos no mesmo agrupamento, mantendo só o melhor_existente.
-                    duplicados_para_remover = [
-                        posto for posto in postos_proximos if posto.id != melhor_existente.id
-                    ]
-
-                    for duplicado in duplicados_para_remover:
-                        duplicado.delete()
-                        total_geral_duplicados_removidos += 1
-                        self.stdout.write(f" x Duplicado removido: {duplicado.name}")
-
-                next_page_token = response.get('next_page_token')
-                if not next_page_token:
+                token = response.get('nextPageToken')
+                if not token:
                     break
 
                 self.stdout.write('Preparando próxima página...')
-                time.sleep(2)
-                params = {
-                    'pagetoken': next_page_token,
-                    'key': api_key,
-                }
+                response = self.fetch_next_page(url, headers, regiao, center, token)
+                if not response:
+                    self.stdout.write(self.style.ERROR('Falha ao carregar próxima página. Pulando região.'))
+                    break
+                page += 1
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                '\nFim da varredura! '
-                f'{total_geral_adicionado} novos postos cadastrados, '
-                f'{total_geral_atualizado} atualizados, '
-                f'{total_geral_ignorados} ignorados e '
-                f'{total_geral_duplicados_removidos} duplicados removidos.'
-            )
-        )
+            self.stdout.write(self.style.SUCCESS(
+                f"Resumo da região '{nome_regiao}': "
+                f"{counters['created']} novos, {counters['updated']} atualizados, "
+                f"{counters['ignored']} ignorados, {counters['duplicates_removed']} duplicados removidos, "
+                f"{counters['filtered_out']} filtrados fora da região."
+            ))
+
+        self.stdout.write(self.style.SUCCESS(
+            '\nFim da varredura! '
+            f"{totals['created']} novos, {totals['updated']} atualizados, {totals['ignored']} ignorados, "
+            f"{totals['duplicates_removed']} duplicados removidos e {totals['filtered_out']} filtrados fora da região."
+        ))
+
+    def handle(self, *args, **options):
+        dry_run = options['dry_run']
+        sync = options['sync']
+
+        with transaction.atomic():
+            self.run_import(dry_run=dry_run, sync=sync)
+            if dry_run:
+                self.stdout.write(self.style.WARNING('DRY-RUN concluído. Desfazendo alterações...'))
+                transaction.set_rollback(True)

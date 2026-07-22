@@ -2,6 +2,9 @@ from django.core.management.base import BaseCommand
 from api.models import Posto
 from api.management.commands.importar_postos import identificar_bandeira
 
+"""
+"""
+
 class Command(BaseCommand):
     help = 'Reavalia o nome de todos os postos e atualiza a bandeira no banco'
 
