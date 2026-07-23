@@ -35,7 +35,7 @@ env = environ.Env()
 
 regioes = [
     # EXEMPLO COM BAIRRO + CIDADE
-    # {'bairro': 'Alecrim', 'cidade': 'Natal', 'uf': 'RN', 'aliases': ['alecrim']},
+    {'bairro': 'Nova Parnamirim', 'cidade': 'Parnamirim', 'uf': 'RN', 'aliases': ['nova parnamirim']},
 
     # EXEMPLO COM CIDADE INTEIRA
     # {'cidade': 'São José de Mipibu', 'uf': 'RN', 'aliases': ['são josé de mipibu']},
@@ -53,6 +53,7 @@ BANDEIRAS = {
     'Estrela': r'\bestrela\b',
     'Posto Macaco': r'\bmacaco\b',
     'Setta': r'\bsetta\b',
+    'Domingos': r'\bdomingos\b',
 }
 
 
@@ -304,11 +305,11 @@ class Command(BaseCommand):
                     totals['duplicates_removed'] += removed
 
                     if action == 'created':
-                        self.stdout.write(f' + {name} cadastrado.')
+                        self.stdout.write(f' + Cadastrado {place['name']} | {place['address']}.')
                     elif action == 'updated':
-                        self.stdout.write(f' ~ Atualizado: {name}')
+                        self.stdout.write(f' ~ Atualizado: {place['name']} | {place['address']}')
                     else:
-                        self.stdout.write(f" - Ignorado '{name}' pois já existe posto correspondente.")
+                        self.stdout.write(f" - Ignorado {place['name']} | {place['address']} pois já existe posto correspondente.")
 
                 token = response.get('nextPageToken')
                 if not token:

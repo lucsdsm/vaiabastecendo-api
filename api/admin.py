@@ -1,11 +1,15 @@
 import csv
 
+from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.gis import admin
 from django.http import HttpResponse
 
 from .models import FuelType, PriceUpdate, Reaction, Station, User
 
+admin.site.site_header = "Vai Abastecendo"
+admin.site.site_title = "Vai Abastecendo"
+admin.site.index_title = "Painel administrativo"
 
 @admin.action(description='Exportar postos selecionados para CSV')
 def export_selected_stations_to_csv(modeladmin, request, queryset):
