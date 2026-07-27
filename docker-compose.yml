@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgis/postgis:15-3.3-alpine
+    image: imresamu/postgis:15-3.5-alpine
     volumes:
       - postgres_data:/var/lib/postgresql/data
     environment:
@@ -38,7 +38,7 @@ services:
     image: nginx:alpine
     ports:
       - "80:80"
-      - "4443:443"
+      - "8443:8443"
     volumes:
       - ./nginx:/etc/nginx/conf.d
       - ./certbot/conf:/etc/letsencrypt

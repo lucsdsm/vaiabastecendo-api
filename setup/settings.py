@@ -30,7 +30,7 @@ SECRET_KEY = env('DJANGO_SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool('DJANGO_DEBUG', default=False)
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
 
 
 # Application definition
@@ -150,7 +150,10 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS settings
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS=['https://vaiabastecendo.lucsdsm.com.br']
+
+# CSRF settings
+CSRF_TRUSTED_ORIGINS=['https://vaiabastecendo.lucsdsm.com.br']
 
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
@@ -167,12 +170,8 @@ REST_FRAMEWORK = {
 
 SOCIALACCOUNT_ADAPTER = 'api.adapters.CustomSocialAccountAdapter'
 
-CSRF_TRUSTED_ORIGINS = [
-    'https://bookish-space-broccoli-qrqvwq77r526wqx-8000.app.github.dev',
-]
-
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-SITE_ID = 2
+SITE_ID = 1
 
 AUTH_USER_MODEL = 'api.User'
