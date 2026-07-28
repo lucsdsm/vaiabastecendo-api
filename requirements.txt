@@ -16,3 +16,5 @@ requests
 requests-oauthlib
 
 gunicorn
+pandas
+openpyxl
