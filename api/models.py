@@ -37,9 +37,13 @@ class Station(models.Model):
     name = models.CharField(max_length=255)
     location = models.PointField(srid=4326, geography=True)
     address = models.CharField(max_length=255)
+    city = models.CharField(max_length=120, null=True, blank=True)
+    neighborhood = models.CharField(max_length=120, null=True, blank=True)
     brand = models.CharField(max_length=50, default='Bandeira Branca')
     rating = models.FloatField(null=True, blank=True)
     user_ratings_total = models.IntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = "Posto"

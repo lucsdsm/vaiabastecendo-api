@@ -20,18 +20,18 @@ def export_selected_stations_to_csv(modeladmin, request, queryset):
     response['Content-Disposition'] = 'attachment; filename="stations.csv"'
 
     writer = csv.writer(response)
-    writer.writerow(['id', 'name', 'brand', 'address', 'rating'])
+    writer.writerow(['id', 'name', 'city', 'neighborhood', 'address', 'brand', 'rating', 'created_at', 'updated_at'])
 
     for station in queryset:
-        writer.writerow([station.id, station.name, station.brand, station.address, station.rating])
+        writer.writerow([station.id, station.name, station.city, station.neighborhood, station.address, station.brand, station.rating, station.created_at, station.updated_at])
 
     return response
 
 
 @admin.register(Station)
 class StationAdmin(admin.GISModelAdmin):
-    list_display = ('place_id', 'name', 'address', 'brand', 'rating')
-    search_fields = ('place_id', 'name', 'address', 'brand')
+    list_display = ('place_id', 'name', 'city', 'neighborhood', 'address', 'brand', 'rating', 'created_at', 'updated_at')
+    search_fields = ('place_id', 'name', 'city', 'neighborhood', 'address', 'brand', 'created_at', 'updated_at')
     actions = [export_selected_stations_to_csv]
 
     gis_widget_kwargs = {

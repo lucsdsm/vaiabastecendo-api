@@ -299,6 +299,8 @@ class Command(BaseCommand):
             'rating': place['rating'],
             'user_ratings_total': place['user_ratings_total'],
             'location': Point(float(place['lng']), float(place['lat']), srid=4326),
+            'created_at': models.DateTimeField(auto_now_add=True),
+            'updated_at': models.DateTimeField(auto_now=True),
         }
 
     def apply_updates(self, station, defaults):
