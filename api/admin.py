@@ -49,10 +49,27 @@ class CustomUserAdmin(UserAdmin):
     Customiza a administração do usuário adicionando o campo de pontuação.
     """
 
+    readonly_fields = ('likes_received', 'verified_user')
+
     fieldsets = UserAdmin.fieldsets + (
-        ('Gamificação', {'fields': ('points',)}),
+        ('Métricas', {'fields': ('likes_received', 'verified_user')}),
     )
-    list_display = UserAdmin.list_display + ('points',)
+
+    list_display = UserAdmin.list_display + ('likes_received', 'verified_user')
+
+    def likes_received(self, obj):
+        return Reaction.objects.filter(
+            price_update__user=obj,
+            reaction_type='like',
+        ).count()
+    likes_received.short_description = 'Likes recebidos'
+
+    def verified_user(self, obj):
+        return Reaction.objects.filter(
+            price_update__user=obj,
+            reaction_type='like',
+        ).count() >= 100
+    verified_user.short_description = 'Usuário verificado'
 
 
 admin.site.register(FuelType)

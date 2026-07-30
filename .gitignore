@@ -5,5 +5,7 @@ __pycache__/
 *.pyc
 /certbot
 
+/backups
+
 # arquivos de documentação
 /docs

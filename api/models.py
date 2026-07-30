@@ -14,18 +14,23 @@ class User(AbstractUser):
     nas atualizações de preço publicadas por ele.
     """
 
-    points = models.IntegerField(default=0)
-
     class Meta:
         verbose_name = "Usuário"
         verbose_name_plural = "Usuários"
+
+    @property
+    def likes_received(self):
+        return Reaction.objects.filter(
+            price_update__user=self,
+            reaction_type='like',
+        ).count()
 
     @property
     def verified(self):
         """
         Indica se o usuário já atingiu a pontuação mínima para verificação.
         """
-        return self.points >= 100
+        return self.likes_received >= 100
 
 
 class Station(models.Model):
@@ -131,47 +136,3 @@ class Reaction(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.reaction_type} em {self.price_update.id}"
-
-
-def _update_user_points(user_id, delta):
-    """
-    Atualiza a pontuação do usuário de forma atômica, impedindo valores negativos.
-    """
-    User.objects.filter(pk=user_id).update(
-        points=Case(
-            When(points__lte=-delta, then=Value(0)),
-            default=F('points') + delta,
-            output_field=IntegerField(),
-        )
-    )
-
-
-@receiver(post_save, sender=Reaction)
-def process_reaction_score(sender, instance, created, **kwargs):
-    """
-    Atualiza a pontuação do autor da atualização quando uma reação é criada
-    ou quando uma reação existente muda de tipo.
-    """
-    author = instance.price_update.user
-    if not author:
-        return
-
-    if created:
-        delta = 1 if instance.reaction_type == 'like' else -1
-    else:
-        delta = 2 if instance.reaction_type == 'like' else -2
-
-    _update_user_points(author.pk, delta)
-
-
-@receiver(post_delete, sender=Reaction)
-def revert_reaction_score(sender, instance, **kwargs):
-    """
-    Reverte a pontuação do autor quando uma reação é removida.
-    """
-    author = instance.price_update.user
-    if not author:
-        return
-
-    delta = -1 if instance.reaction_type == 'like' else 1
-    _update_user_points(author.pk, delta)

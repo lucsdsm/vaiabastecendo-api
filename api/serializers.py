@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from allauth.socialaccount.models import SocialAccount
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
@@ -9,11 +10,89 @@ from .models import FuelType, PriceUpdate, Reaction, Station
 User = get_user_model()
 
 
-class StationSerializer(serializers.ModelSerializer):
-    """
-    Serializa os dados de um posto com seus preços atuais e metadados de localização.
-    """
+class PriceUpdateHistorySerializer(serializers.ModelSerializer):
+    fuel_type = serializers.CharField(source='fuel_type.name', read_only=True)
+    color = serializers.CharField(source='fuel_type.color', read_only=True)
+    station = serializers.SerializerMethodField()
+    author = serializers.SerializerMethodField()
+    likes = serializers.SerializerMethodField()
 
+    class Meta:
+        model = PriceUpdate
+        fields = ['id', 'station', 'fuel_type', 'color', 'price', 'created_at', 'author', 'likes']
+
+    def get_station(self, obj):
+        return {
+            'id': obj.station_id,
+            'name': obj.station.name,
+            'brand': obj.station.brand,
+            'address': obj.station.address,
+        }
+
+    def get_author(self, obj):
+        return obj.user.username if obj.user else 'Anônimo'
+
+    def get_likes(self, obj):
+        return obj.reactions.filter(reaction_type='like').count()
+
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    photo = serializers.SerializerMethodField()
+    likes_given = serializers.SerializerMethodField()
+    likes_received = serializers.SerializerMethodField()
+    history = serializers.SerializerMethodField()
+    verified = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            'id',
+            'username',
+            'first_name',
+            'last_name',
+            'email',
+            'photo',
+            'likes_received',
+            'likes_given',
+            'verified',
+            'history',
+        ]
+
+    def get_photo(self, obj):
+        social_account = SocialAccount.objects.filter(
+            user=obj,
+            provider='google',
+        ).first()
+
+        if not social_account:
+            return None
+
+        return social_account.extra_data.get('picture')
+
+    def get_likes_given(self, obj):
+        return Reaction.objects.filter(user=obj, reaction_type='like').count()
+
+    def get_likes_received(self, obj):
+        return Reaction.objects.filter(
+            price_update__user=obj,
+            reaction_type='like',
+        ).count()
+
+    def get_verified(self, obj):
+        return self.get_likes_received(obj) >= 100
+
+    def get_history(self, obj):
+        updates = (
+            PriceUpdate.objects
+            .filter(user=obj)
+            .select_related('station', 'fuel_type', 'user')
+            .prefetch_related('reactions')
+            .order_by('-created_at')[:10]
+        )
+        return PriceUpdateHistorySerializer(updates, many=True, context=self.context).data
+
+
+class StationSerializer(serializers.ModelSerializer):
     latitude = serializers.SerializerMethodField()
     longitude = serializers.SerializerMethodField()
     distance_meters = serializers.SerializerMethodField()
@@ -36,67 +115,40 @@ class StationSerializer(serializers.ModelSerializer):
         ]
 
     def get_latitude(self, obj):
-        """
-        Retorna a latitude extraída do ponto geográfico do posto.
-        """
         return obj.location.y if obj.location else None
 
     def get_longitude(self, obj):
-        """
-        Retorna a longitude extraída do ponto geográfico do posto.
-        """
         return obj.location.x if obj.location else None
 
     def get_distance_meters(self, obj):
-        """
-        Retorna a distância em metros anotada na queryset da view.
-        """
         if hasattr(obj, 'calculated_distance') and obj.calculated_distance:
             return obj.calculated_distance.m
         return None
 
     def _get_active_updates(self, obj):
-        """
-        Retorna as atualizações ativas já prefetchadas, reutilizando cache local
-        no objeto quando disponível.
-        """
         cache_attr = '_cached_active_updates'
-
         if not hasattr(obj, cache_attr):
             setattr(obj, cache_attr, list(obj.price_updates.all()))
-
         return getattr(obj, cache_attr)
 
     def get_last_updated_by(self, obj):
-        """
-        Retorna o autor da atualização mais recente do posto.
-        """
         updates = self._get_active_updates(obj)
 
         if not updates:
-            return {
-                "name": "Anônimo",
-                "verified": False,
-            }
+            return {'name': 'Anônimo', 'verified': False}
 
         latest_update = updates[0]
 
         if latest_update.user:
             user = latest_update.user
             return {
-                "name": user.username,
-                "verified": user.verified,
+                'name': user.username,
+                'verified': user.verified,
             }
 
-        return {
-            "name": "Anônimo",
-            "verified": False,
-        }
+        return {'name': 'Anônimo', 'verified': False}
 
     def get_current_prices(self, obj):
-        """
-        Monta o snapshot do preço mais recente de cada tipo de combustível.
-        """
         request = self.context.get('request')
         authenticated_user = (
             request.user
@@ -147,29 +199,18 @@ class StationSerializer(serializers.ModelSerializer):
 
 
 class FuelTypeSerializer(serializers.ModelSerializer):
-    """
-    Serializa os metadados do tipo de combustível.
-    """
-
     class Meta:
         model = FuelType
         fields = ['id', 'name', 'color']
 
 
 class PriceUpdateSerializer(serializers.ModelSerializer):
-    """
-    Serializa uma atualização de preço e aplica validações de consistência.
-    """
-
     class Meta:
         model = PriceUpdate
         fields = ['id', 'station', 'fuel_type', 'price', 'user', 'created_at', 'status']
         read_only_fields = ['user', 'created_at', 'status']
 
     def validate(self, data):
-        """
-        Valida a faixa aceitável do preço com base no último valor ativo.
-        """
         station = data.get('station')
         fuel_type = data.get('fuel_type')
         new_price = data.get('price')
@@ -187,41 +228,18 @@ class PriceUpdateSerializer(serializers.ModelSerializer):
 
             if new_price > upper_limit or new_price < lower_limit:
                 raise serializers.ValidationError({
-                    "price": f"Valor suspeito. O preço atual é de R$ {current_price}"
+                    'price': f'Valor suspeito. O preço atual é de R$ {current_price}'
                 })
         else:
             if new_price < Decimal('1.00') or new_price > Decimal('15.00'):
                 raise serializers.ValidationError({
-                    "price": "O valor informado está fora da realidade do mercado."
+                    'price': 'O valor informado está fora da realidade do mercado.'
                 })
 
         return data
 
 
-class PriceUpdateHistorySerializer(serializers.ModelSerializer):
-    """
-    Serializa os dados necessários para listagem de histórico de preços.
-    """
-
-    fuel_type = serializers.CharField(source='fuel_type.name', read_only=True)
-    author = serializers.SerializerMethodField()
-
-    class Meta:
-        model = PriceUpdate
-        fields = ['id', 'fuel_type', 'price', 'created_at', 'author']
-
-    def get_author(self, obj):
-        """
-        Retorna o nome do autor da atualização ou um fallback anônimo.
-        """
-        return obj.user.username if obj.user else "Anônimo"
-
-
 class ReactionSerializer(serializers.ModelSerializer):
-    """
-    Serializa as reações vinculadas a uma atualização de preço.
-    """
-
     class Meta:
         model = Reaction
         fields = ['id', 'price_update', 'user', 'reaction_type']

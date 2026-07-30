@@ -7,7 +7,6 @@ from .views.price_updates import PriceUpdateViewSet
 from .views.reactions import ReactionViewSet
 from .views.stations import StationViewSet
 
-
 router = DefaultRouter()
 
 router.register(r'stations', StationViewSet, basename='station')
