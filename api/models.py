@@ -25,13 +25,6 @@ class User(AbstractUser):
             reaction_type='like',
         ).count()
 
-    @property
-    def verified(self):
-        """
-        Indica se o usuário já atingiu a pontuação mínima para verificação.
-        """
-        return self.likes_received >= 100
-
 
 class Station(models.Model):
     """

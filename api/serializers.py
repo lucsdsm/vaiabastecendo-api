@@ -41,7 +41,6 @@ class UserProfileSerializer(serializers.ModelSerializer):
     likes_given = serializers.SerializerMethodField()
     likes_received = serializers.SerializerMethodField()
     history = serializers.SerializerMethodField()
-    verified = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -54,7 +53,6 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'photo',
             'likes_received',
             'likes_given',
-            'verified',
             'history',
         ]
 
@@ -77,9 +75,6 @@ class UserProfileSerializer(serializers.ModelSerializer):
             price_update__user=obj,
             reaction_type='like',
         ).count()
-
-    def get_verified(self, obj):
-        return self.get_likes_received(obj) >= 100
 
     def get_history(self, obj):
         updates = (
@@ -135,7 +130,7 @@ class StationSerializer(serializers.ModelSerializer):
         updates = self._get_active_updates(obj)
 
         if not updates:
-            return {'name': 'Anônimo', 'verified': False}
+            return {'name': 'Anônimo'}
 
         latest_update = updates[0]
 
@@ -143,10 +138,13 @@ class StationSerializer(serializers.ModelSerializer):
             user = latest_update.user
             return {
                 'name': user.username,
-                'verified': user.verified,
+                'likes_received': Reaction.objects.filter(
+                    price_update__user=user,
+                    reaction_type='like',
+                ).count(),
             }
 
-        return {'name': 'Anônimo', 'verified': False}
+        return {'name': 'Anônimo', 'likes_received': 0}
 
     def get_current_prices(self, obj):
         request = self.context.get('request')
