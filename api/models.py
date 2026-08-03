@@ -14,6 +14,8 @@ class User(AbstractUser):
     nas atualizações de preço publicadas por ele.
     """
 
+    likes_received_test = models.PositiveIntegerField(null=True, blank=True)
+
     class Meta:
         verbose_name = "Usuário"
         verbose_name_plural = "Usuários"

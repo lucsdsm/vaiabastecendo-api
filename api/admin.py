@@ -49,8 +49,13 @@ class CustomUserAdmin(UserAdmin):
     Customiza a administração do usuário adicionando o campo de pontuação.
     """
 
-    readonly_fields = ('username', 'email', 'likes_received')
-
+    readonly_fields = ('username', 'email')
+    fieldsets = UserAdmin.fieldsets + (
+        ('Configuração de teste', {
+            'fields': ('likes_received_test',),
+        }),
+    )
+    
 admin.site.register(FuelType)
 admin.site.register(PriceUpdate)
 admin.site.register(Reaction)

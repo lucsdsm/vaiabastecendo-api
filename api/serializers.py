@@ -71,6 +71,9 @@ class UserProfileSerializer(serializers.ModelSerializer):
         return Reaction.objects.filter(user=obj, reaction_type='like').count()
 
     def get_likes_received(self, obj):
+        if obj.likes_received_test is not None:
+            return obj.likes_received_test
+
         return Reaction.objects.filter(
             price_update__user=obj,
             reaction_type='like',
@@ -136,12 +139,18 @@ class StationSerializer(serializers.ModelSerializer):
 
         if latest_update.user:
             user = latest_update.user
-            return {
-                'name': user.username,
-                'likes_received': Reaction.objects.filter(
+            likes_received = (
+                user.likes_received_test
+                if user.likes_received_test is not None
+                else Reaction.objects.filter(
                     price_update__user=user,
                     reaction_type='like',
-                ).count(),
+                ).count()
+            )
+
+            return {
+                'name': user.username,
+                'likes_received': likes_received,
             }
 
         return {'name': 'Anônimo', 'likes_received': 0}
