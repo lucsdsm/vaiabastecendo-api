@@ -7,6 +7,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
+from api.pagination import StationPagination
 from api.models import FuelType, PriceUpdate, Reaction, Station
 from api.serializers import PriceUpdateHistorySerializer, StationSerializer
 
@@ -17,6 +18,7 @@ class StationViewSet(viewsets.ModelViewSet):
     """
 
     serializer_class = StationSerializer
+    pagination_class = StationPagination
 
     def _get_user_location(self):
         """
@@ -37,6 +39,23 @@ class StationViewSet(viewsets.ModelViewSet):
             raise ValidationError({
                 "detail": "Os parâmetros 'lat' e 'lng' devem ser números válidos."
             })
+
+    def _get_radius_km(self):
+        radius_km = self.request.query_params.get('radius_km', '5')
+
+        try:
+            radius_km = int(radius_km)
+        except (TypeError, ValueError):
+            raise ValidationError({
+                "detail": "O parâmetro 'radius_km' deve ser um número válido."
+            })
+
+        if radius_km not in [2, 5, 10]:
+            raise ValidationError({
+                "detail": "O parâmetro 'radius_km' deve ser 2, 5 ou 10."
+            })
+
+        return radius_km
 
     def get_queryset(self):
         """
@@ -67,9 +86,12 @@ class StationViewSet(viewsets.ModelViewSet):
         user_location = self._get_user_location()
 
         if user_location:
+
+            radius_km = self._get_radius_km()
+
             queryset = (
                 queryset
-                .filter(location__dwithin=(user_location, D(km=10)))
+                .filter(location__dwithin=(user_location, D(km=radius_km)))
                 .annotate(calculated_distance=Distance('location', user_location))
                 .order_by('calculated_distance')
             )
