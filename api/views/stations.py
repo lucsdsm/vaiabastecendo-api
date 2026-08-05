@@ -41,7 +41,7 @@ class StationViewSet(viewsets.ModelViewSet):
             })
 
     def _get_radius_km(self):
-        radius_km = self.request.query_params.get('radius_km', '5')
+        radius_km = self.request.query_params.get('radius_km', '3')
 
         try:
             radius_km = int(radius_km)
@@ -50,9 +50,9 @@ class StationViewSet(viewsets.ModelViewSet):
                 "detail": "O parâmetro 'radius_km' deve ser um número válido."
             })
 
-        if radius_km not in [2, 5, 10]:
+        if radius_km not in [2, 3, 5]:
             raise ValidationError({
-                "detail": "O parâmetro 'radius_km' deve ser 2, 5 ou 10."
+                "detail": "O parâmetro 'radius_km' deve ser 2, 3 ou 5."
             })
 
         return radius_km
@@ -91,10 +91,11 @@ class StationViewSet(viewsets.ModelViewSet):
 
             queryset = (
                 queryset
-                .filter(location__dwithin=(user_location, D(km=radius_km)))
                 .annotate(calculated_distance=Distance('location', user_location))
+                .filter(calculated_distance__lte=radius_km * 1000)
                 .order_by('calculated_distance')
             )
+
         else:
             queryset = queryset.order_by('id')
 
