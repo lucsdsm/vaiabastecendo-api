@@ -5,8 +5,8 @@ import time
 import requests
 from queue import Queue
 from django.conf import settings
+from django.utils import timezone
 
-# Substitua pela sua URL
 DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL')
 
 # Fila global em memória
@@ -47,10 +47,16 @@ def discord_worker():
                 "color": color,
                 "fields": [
                     {"name": "Status", "value": str(log['status']), "inline": True},
-                    {"name": "IP", "value": log['ip'], "inline": True},
+                    {"name": "Tempo", "value": f"{log['duration_ms']} ms", "inline": True},
                     {"name": "Usuário", "value": log['user'], "inline": True},
-                    {"name": "User-Agent", "value": log.get('user_agent', 'N/A'), "inline": False},
-                ]
+                    {"name": "IP", "value": log['ip'], "inline": True},
+                    {"name": "Rota", "value": log['route_name'], "inline": True},
+                    {"name": "Query", "value": log['query_string'] or "-", "inline": False},
+                    {"name": "UA", "value": (log['user_agent'][:100] or "-"), "inline": False},
+                ],
+                "footer": {
+                    "text": log['timestamp']
+                }
             })
 
         payload = {"embeds": embeds}
@@ -83,25 +89,43 @@ class DiscordMonitorMiddleware:
             _worker_started = True
 
     def __call__(self, request):
-        response = self.get_response(request)
+        start = time.monotonic() # Marca o tempo de início para medir a duração da requisição
+        response = self.get_response(request) # Processa a requisição e obtém a resposta
+        duration_ms = round((time.monotonic() - start) * 1000, 2) # Calcula a duração da requisição
 
-        # Captura o IP verdadeiro
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0]
-        else:
-            ip = request.META.get('REMOTE_ADDR')
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR') # Captura o IP real do cliente, mesmo atrás de proxies
+        ip = x_forwarded_for.split(',')[0] if x_forwarded_for else request.META.get('REMOTE_ADDR') # Captura o IP do cliente diretamente do request
 
-        # Captura o nome de usuário (se estiver logado pelo sistema de auth do Django)
-        user = request.user.username if hasattr(request, 'user') and request.user.is_authenticated else "Anônimo"
+        user = request.user.username if hasattr(request, 'user') and request.user.is_authenticated else "Anônimo" # Captura o nome do usuário autenticado, ou "Anônimo" se não estiver autenticado
+
+        user_id = request.user.id if hasattr(request, 'user') and request.user.is_authenticated else None
+        user_agent = request.META.get('HTTP_USER_AGENT', '-')
+        referer = request.META.get('HTTP_REFERER', '-')
+        content_type = request.META.get('CONTENT_TYPE', '-')
+        route_name = getattr(getattr(request, 'resolver_match', None), 'view_name', '-') or '-'
+        path = request.path
+        query_string = request.META.get('QUERY_STRING', '')
+        status_code = response.status_code
+        response_size = response.get('Content-Length', '-') or '-'
+        method = request.method
+        timestamp = timezone.now().isoformat()
 
         # Coloca as informações na fila de forma quase instantânea
         log_data = {
-            'method': request.method,
-            'path': request.get_full_path(),
-            'status': response.status_code,
+            'timestamp': timestamp,
+            'method': method,
+            'path': path,
+            'query_string': query_string,
+            'status': status_code,
+            'duration_ms': duration_ms,
             'ip': ip,
-            'user': user
+            'user': user,
+            'user_id': str(user_id) if user_id is not None else '-',
+            'user_agent': user_agent,
+            'referer': referer,
+            'content_type': content_type,
+            'response_size': str(response_size),
+            'route_name': route_name,
         }
         log_queue.put(log_data)
 
